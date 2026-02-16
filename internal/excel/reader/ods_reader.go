@@ -13,34 +13,6 @@ type SimpleODSReader struct {
 	Sheets map[string][][]string
 }
 
-// odsTable represents a table in ODS
-type odsTable struct {
-	XMLName xml.Name `xml:"urn:oasis:names:tc:opendocument:xmlns:table:1.0 table"`
-	Name    string   `xml:"urn:oasis:names:tc:opendocument:xmlns:table:1.0 name,attr"`
-	Rows    []odsRow `xml:"urn:oasis:names:tc:opendocument:xmlns:table:1.0 table-row"`
-}
-
-type odsRow struct {
-	Cells []odsCell `xml:"urn:oasis:names:tc:opendocument:xmlns:table:1.0 table-cell"`
-}
-
-type odsCell struct {
-	Text string `xml:"urn:oasis:names:tc:opendocument:xmlns:text:1.0 p"`
-}
-
-type odsDocument struct {
-	XMLName string `xml:"urn:oasis:names:tc:opendocument:xmlns:office:1.0 document-content"`
-	Body    odsBody
-}
-
-type odsBody struct {
-	Spreadsheet odsSpreadsheet `xml:"urn:oasis:names:tc:opendocument:xmlns:office:1.0 spreadsheet"`
-}
-
-type odsSpreadsheet struct {
-	Tables []odsTable `xml:"urn:oasis:names:tc:opendocument:xmlns:table:1.0 table"`
-}
-
 // OpenODS opens an ODS file and parses its content
 func OpenODS(filename string) (*SimpleODSReader, error) {
 	reader := &SimpleODSReader{
@@ -76,38 +48,9 @@ func OpenODS(filename string) (*SimpleODSReader, error) {
 		return nil, fmt.Errorf("content.xml not found in archive")
 	}
 
-	// Parse XML with namespace handling
-	var doc struct {
-		XMLName xml.Name
-		Body    struct {
-			Spreadsheet struct {
-				Tables []odsTable
-			}
-		}
-	}
-
-	err = xml.Unmarshal(contentData, &doc)
-	if err != nil {
-		// Try parsing with simple approach
-		if err := reader.parseODSSimple(contentData); err != nil {
-			return nil, fmt.Errorf("error parsing ODS: %w", err)
-		}
-	} else {
-		// Convert tables to data
-		for _, table := range doc.Body.Spreadsheet.Tables {
-			var rows [][]string
-			for _, row := range table.Rows {
-				var cells []string
-				for _, cell := range row.Cells {
-					text := strings.TrimSpace(cell.Text)
-					cells = append(cells, text)
-				}
-				if len(cells) > 0 {
-					rows = append(rows, cells)
-				}
-			}
-			reader.Sheets[table.Name] = rows
-		}
+	// Parse XML content
+	if err := reader.parseODSSimple(contentData); err != nil {
+		return nil, fmt.Errorf("error parsing ODS: %w", err)
 	}
 
 	return reader, nil
