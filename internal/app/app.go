@@ -13,9 +13,16 @@ import (
 func Init() {
 	log.Println("Початок обробки документів...")
 
-	// Файли для обробки
+	// Файли для обробки (значення за замовчуванням)
 	accrualFile := "нарахування26.ods"
 	paymentFile := "stmts_37465042_UA313052990000026006021101792_1766677585832.xlsx"
+	outputFile := "summery.xlsx"
+	ProcessFiles(accrualFile, paymentFile, outputFile)
+}
+
+// ProcessFiles обробляє файли та записує результати
+func ProcessFiles(accrualFile, paymentFile, outputFile string) {
+	log.Println("Початок обробки документів...")
 
 	// Крок 1: Читаємо дані з файлу нарахування
 	log.Printf("Читання даних з файлу нарахування: %s\n", accrualFile)
@@ -46,8 +53,8 @@ func Init() {
 	results := processPayments(payments, accountToName, accountList)
 
 	// Крок 5: Записуємо результати
-	log.Println("Запис результатів у файл summery.xlsx...")
-	if err := writer.WriteResults(results); err != nil {
+	log.Printf("Запис результатів у файл %s...\n", outputFile)
+	if err := writer.WriteResults(results, outputFile); err != nil {
 		log.Fatalf("Помилка при записі результатів: %v\n", err)
 	}
 

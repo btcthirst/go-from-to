@@ -1,7 +1,8 @@
 package main
 
-import "excel-parser/internal/app"
+import "excel-parser/internal/ui"
 
 func main() {
-	app.Init()
+	uiManager := ui.NewUIManager()
+	uiManager.Run()
 }

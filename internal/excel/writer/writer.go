@@ -9,8 +9,8 @@ import (
 	"github.com/xuri/excelize/v2"
 )
 
-// WriteResults записує результати у файл summery.xlsx
-func WriteResults(results []model.ResultRecord) error {
+// WriteResults записує результати у файл
+func WriteResults(results []model.ResultRecord, outputFile string) error {
 	f := excelize.NewFile()
 	defer f.Close()
 
@@ -50,10 +50,10 @@ func WriteResults(results []model.ResultRecord) error {
 	}
 
 	// Зберігаємо файл
-	if err := f.SaveAs("summery.xlsx"); err != nil {
+	if err := f.SaveAs(outputFile); err != nil {
 		return fmt.Errorf("помилка при збереженні файлу: %w", err)
 	}
 
-	log.Println("Результати успішно записані у summery.xlsx")
+	log.Printf("Результати успішно записані у %s\n", outputFile)
 	return nil
 }
