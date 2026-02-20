@@ -2,6 +2,7 @@
 package reader
 
 import (
+	"excel-parser/internal/config"
 	"excel-parser/internal/model"
 	"fmt"
 	"regexp"
@@ -32,6 +33,12 @@ func isValidName(name string) bool {
 
 // GetAccrualRecords читає файл нарахування та повертає список записів з ПІБ та рахунками
 func GetAccrualRecords(filename string) ([]model.AccrualRecord, error) {
+	// Отримуємо конфігурацію для акордів
+	accrualConfig, err := config.GetDocumentConfig("accruals")
+	if err != nil {
+		return nil, fmt.Errorf("помилка завантаження конфігурації: %w", err)
+	}
+
 	// Визначаємо тип файлу за розширенням
 	var rows [][]string
 
@@ -47,12 +54,12 @@ func GetAccrualRecords(filename string) ([]model.AccrualRecord, error) {
 		if errGetSheet != nil {
 			return nil, fmt.Errorf("помилка читання аркуша ODS: %w", errGetSheet)
 		}
-		
+
 		fmt.Printf("DEBUG: ODS файл завантажений, рядків: %d\n", len(rows))
 		if len(rows) > 0 {
 			fmt.Printf("DEBUG: Перший рядок: %v\n", rows[0])
-			if len(rows) > 6 {
-				fmt.Printf("DEBUG: 7-й рядок (перший після заголовка): %v\n", rows[6])
+			if len(rows) > accrualConfig.DataStartRow {
+				fmt.Printf("DEBUG: Рядок %d (перший після заголовка): %v\n", accrualConfig.DataStartRow+1, rows[accrualConfig.DataStartRow])
 			}
 		}
 	} else {
@@ -81,38 +88,38 @@ func GetAccrualRecords(filename string) ([]model.AccrualRecord, error) {
 	var records []model.AccrualRecord
 	lineNum := 0
 
-	// Пропускаємо заголовок (перших 6 рядків)
-	for lineNum < 6 && lineNum < len(rows) {
+	// Пропускаємо заголовок згідно конфігурації
+	headerEndRow := accrualConfig.HeaderEndRow
+	for lineNum < headerEndRow && lineNum < len(rows) {
 		fmt.Printf("DEBUG: Пропускаємо заголовок рядок %d: %v\n", lineNum+1, rows[lineNum])
 		lineNum++
 	}
 
-	// Читаємо дані з рядка 7+
+	// Отримуємо індекси колонок з конфігурації
+	fullNameIndex, _ := accrualConfig.GetColumnIndex("full_name")
+	accountIndex, _ := accrualConfig.GetColumnIndex("account")
+
+	// Читаємо дані
 	for lineNum < len(rows) {
 		cols := rows[lineNum]
 		lineNum++
 
-		if lineNum <= 10 {
+		if lineNum <= accrualConfig.DataStartRow+5 {
 			fmt.Printf("DEBUG: Processing рядок %d: %v\n", lineNum, cols)
 		}
 
-		// Пропускаємо порожні рядки
-		if len(cols) == 0 {
+		// Перевіряємо валідність рядка за конфігурацією
+		if !accrualConfig.IsValidRow(cols) {
 			continue
 		}
 
-		// Очікуємо мінімум 3 колонки: № квартири, ПІБ та рахунок
-		if len(cols) < 3 {
-			continue
-		}
+		fullName := strings.TrimSpace(cols[fullNameIndex])
+		account := strings.TrimSpace(cols[accountIndex])
 
-		fullName := strings.TrimSpace(cols[1])
-		account := strings.TrimSpace(cols[2])
-
-		// Пропускаємо запису якщо ПІБ порожній або це число
-		if fullName == "" || account == "" || !isValidName(fullName) {
-			if lineNum <= 10 && (fullName != "" || account != "") {
-				fmt.Printf("DEBUG: Skipped (invalid name or empty): name='%s' account='%s' valid=%v\n", fullName, account, isValidName(fullName))
+		// Пропускаємо запису якщо ПІБ це не валідне ім'я
+		if !isValidName(fullName) {
+			if lineNum <= accrualConfig.DataStartRow+5 && (fullName != "" || account != "") {
+				fmt.Printf("DEBUG: Skipped (invalid name): name='%s' account='%s'\n", fullName, account)
 			}
 			continue
 		}
@@ -130,6 +137,12 @@ func GetAccrualRecords(filename string) ([]model.AccrualRecord, error) {
 
 // GetPaymentRecords читає файл виписки та повертає список платежів
 func GetPaymentRecords(filename string) ([]model.PaymentRecord, error) {
+	// Отримуємо конфігурацію для платежів
+	paymentConfig, err := config.GetDocumentConfig("payments")
+	if err != nil {
+		return nil, fmt.Errorf("помилка завантаження конфігурації: %w", err)
+	}
+
 	f, err := excelize.OpenFile(filename)
 	if err != nil {
 		return nil, fmt.Errorf("помилка відкриття файлу виписки: %w", err)
@@ -146,6 +159,13 @@ func GetPaymentRecords(filename string) ([]model.PaymentRecord, error) {
 	lineNum := 0
 	started := false
 
+	// Отримуємо індекси колонок з конфігурації
+	dateIndex, _ := paymentConfig.GetColumnIndex("date")
+	amountIndex, _ := paymentConfig.GetColumnIndex("amount")
+	purposeIndex, _ := paymentConfig.GetColumnIndex("purpose")
+	counterpartyNameIndex, _ := paymentConfig.GetColumnIndex("counterparty_name")
+	counterpartyAccountIndex, _ := paymentConfig.GetColumnIndex("counterparty_account")
+
 	for rows.Next() {
 		cols, err := rows.Columns()
 		if err != nil {
@@ -155,9 +175,10 @@ func GetPaymentRecords(filename string) ([]model.PaymentRecord, error) {
 
 		lineNum++
 
-		// Шукаємо заголовок таблиці платежів (містить "Дата проводки")
-		if len(cols) > 0 && strings.Contains(cols[0], "Дата") {
+		// Шукаємо заголовок таблиці платежів (тригер з конфігурації)
+		if !started && len(cols) > 0 && strings.Contains(cols[0], paymentConfig.HeaderTrigger) {
 			started = true
+			fmt.Printf("DEBUG: Знайдено заголовок платежів на рядку %d\n", lineNum)
 			continue
 		}
 
@@ -165,25 +186,16 @@ func GetPaymentRecords(filename string) ([]model.PaymentRecord, error) {
 			continue
 		}
 
-		// Пропускаємо порожні рядки
-		if len(cols) == 0 {
+		// Перевіряємо валідність рядка за конфігурацією
+		if !paymentConfig.IsValidRow(cols) {
 			continue
 		}
 
-		// Очікуємо мінімум 9 колонок
-		if len(cols) < 9 {
-			continue
-		}
-
-		date := strings.TrimSpace(cols[1])                // Дата проводки
-		sumStr := strings.TrimSpace(cols[3])              // Сума
-		purpose := strings.TrimSpace(cols[5])             // Призначення платежу
-		counterpartyName := strings.TrimSpace(cols[7])    // Назва контрагента
-		counterpartyAccount := strings.TrimSpace(cols[8]) // Рахунок контрагента
-
-		if date == "" || sumStr == "" {
-			continue
-		}
+		date := strings.TrimSpace(cols[dateIndex])
+		sumStr := strings.TrimSpace(cols[amountIndex])
+		purpose := strings.TrimSpace(cols[purposeIndex])
+		counterpartyName := strings.TrimSpace(cols[counterpartyNameIndex])
+		counterpartyAccount := strings.TrimSpace(cols[counterpartyAccountIndex])
 
 		// Конвертуємо суму у float64
 		var sum float64
@@ -194,9 +206,11 @@ func GetPaymentRecords(filename string) ([]model.PaymentRecord, error) {
 
 		// Комбінуємо дані для пошуку контрагента
 		counterparty := counterpartyName
-		if counterpartyName != "" {
-			counterparty = counterpartyName + purpose
+		if counterpartyName != "" && purpose != "" {
+			counterparty = counterpartyName + " " + purpose
 		}
+
+		fmt.Printf("DEBUG: Payment record - date: %s, sum: %.2f, counterparty: %s\n", date, sum, counterparty)
 
 		records = append(records, model.PaymentRecord{
 			Date:         date,
@@ -207,31 +221,18 @@ func GetPaymentRecords(filename string) ([]model.PaymentRecord, error) {
 		})
 	}
 
+	fmt.Printf("DEBUG: Total payment records found: %d\n", len(records))
 	return records, nil
 }
 
-// FindAccountInCounterparty шукає рахунок у даних контрагента
-func FindAccountInCounterparty(counterparty string, accounts []string) string {
-
-	for _, account := range accounts {
-
+// FindAccountInCounterparty шукає рахунок у даних контрагента за допомогою карти для O(1) пошуку
+// Замість лінійного пошуку O(n) через список, використовує итерацію по ключам карти
+func FindAccountInCounterparty(counterparty string, accountToName map[string]string) string {
+	// Проходимо по всім рахункам у карті та шукаємо перший, що міститься у контрагенті
+	for account := range accountToName {
 		if strings.Contains(counterparty, account) {
-			fmt.Println(counterparty, account)
 			return account
 		}
 	}
-	fmt.Println(counterparty, "не знайдено рахунок")
 	return ""
-}
-
-// trimRow видаляє пусті елементи з рядка
-func trimRow(row []string) []string {
-	result := []string{}
-	for _, r := range row {
-		trimmed := strings.TrimSpace(r)
-		if trimmed != "" {
-			result = append(result, trimmed)
-		}
-	}
-	return result
 }

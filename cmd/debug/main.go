@@ -2,36 +2,43 @@ package main
 
 import (
 	"fmt"
+	"log"
 
-	"github.com/unidoc/unioffice/spreadsheet"
+	"excel-parser/internal/config"
+	"excel-parser/internal/excel/reader"
 )
 
 func main() {
+	// Завантажуємо конфігурацію
+	if err := config.Load("config/document_config.yaml"); err != nil {
+		log.Fatalf("Помилка завантаження конфігурації: %v\n", err)
+	}
+
 	fmt.Println("=== АНАЛІЗ ФАЙЛУ нарахування26.ods ===")
-	doc, err := spreadsheet.Open("нарахування26.ods")
+	doc, err := reader.OpenODS("нарахування26.ods")
 	if err != nil {
 		fmt.Printf("Помилка: %v\n", err)
 		return
 	}
-	defer doc.Close()
 
-	sheets := doc.Sheets()
-	if len(sheets) == 0 {
+	sheetNames := doc.GetAllSheetNames()
+	if len(sheetNames) == 0 {
 		fmt.Println("Не знайдено листів у документі")
 		return
 	}
 
-	sheet := sheets[0]
-	rows := sheet.Rows()
+	// Get first sheet
+	sheetData, err := doc.GetSheet(sheetNames[0])
+	if err != nil {
+		fmt.Printf("Помилка отримання листа: %v\n", err)
+		return
+	}
 
-	for i, row := range rows {
+	// Display first 15 rows
+	for i, row := range sheetData {
 		if i >= 15 {
 			break
 		}
-		var cols []string
-		for _, cell := range row.Cells() {
-			cols = append(cols, cell.GetString())
-		}
-		fmt.Printf("Рядок %d: %v\n", i+1, cols)
+		fmt.Printf("Рядок %d: %v\n", i+1, row)
 	}
 }

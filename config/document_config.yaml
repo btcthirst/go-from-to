@@ -1,0 +1,74 @@
+# Конфігурація для обробки різних форматів документів
+documents:
+  accruals:
+    # Файл нарахувань (ODS або XLSX)
+    name: "Файл нарахувань"
+    supported_formats:
+      - .ods
+      - .xlsx
+    
+    # Номер рядка, з якого починаються дані (1-indexed)
+    data_start_row: 7
+    
+    # Номер рядка, на якому закінчується заголовок (1-indexed)
+    header_end_row: 6
+    
+    # Визначення колонок за індексом (0-indexed)
+    columns:
+      full_name:
+        index: 1
+        name: "ПІБ (ПІБ особи)"
+      account:
+        index: 2
+        name: "Рахунок"
+      
+      # Додаткові колонки для таблиці нарахувань (опціонально)
+      apartment_number:
+        index: 0
+        name: "Номер квартири"
+    
+    # Мінімальна кількість колонок для валідного рядка
+    min_columns: 3
+    
+    # Колонки, які не повинні бути порожніми
+    required_columns:
+      - full_name
+      - account
+
+  payments:
+    # Файл виписки (зазвичай XLSX)
+    name: "Файл виписки платежів"
+    supported_formats:
+      - .xlsx
+    
+    # Назва аркуша (якщо порожно, використовується активний)
+    sheet_name: ""
+    
+    # Заголовок таблиці тригер (рядок, що містить це значення, вважається заголовком)
+    header_trigger: "Дата"
+    
+    # Визначення колонок за індексом (0-indexed)
+    columns:
+      date:
+        index: 1
+        name: "Дата проводки"
+      amount:
+        index: 3
+        name: "Сума"
+      purpose:
+        index: 5
+        name: "Призначення платежу"
+      counterparty_name:
+        index: 7
+        name: "Назва контрагента"
+      counterparty_account:
+        index: 8
+        name: "Рахунок контрагента"
+    
+    # Мінімальна кількість колонок для валідного рядка
+    min_columns: 9
+    
+    # Колонки, які не повинні бути порожніми
+    required_columns:
+      - date
+      - amount

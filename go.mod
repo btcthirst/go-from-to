@@ -4,8 +4,8 @@ go 1.22
 
 require (
 	fyne.io/fyne/v2 v2.7.2
-	github.com/unidoc/unioffice v1.39.0
 	github.com/xuri/excelize/v2 v2.8.1
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -46,5 +46,4 @@ require (
 	golang.org/x/net v0.35.0 // indirect
 	golang.org/x/sys v0.30.0 // indirect
 	golang.org/x/text v0.22.0 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
