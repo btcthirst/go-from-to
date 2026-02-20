@@ -68,6 +68,7 @@ func (r *SimpleODSReader) parseODSSimple(data []byte) error {
 	var cellDepth int
 	var cellText strings.Builder
 	var rowCount int
+	var sheetCount int
 
 	for {
 		token, err := decoder.Token()
@@ -87,6 +88,8 @@ func (r *SimpleODSReader) parseODSSimple(data []byte) error {
 						currentSheet = attr.Value
 						r.Sheets[currentSheet] = [][]string{}
 						rowCount = 0
+						sheetCount++
+						fmt.Printf("DEBUG ODS: Found sheet '%s' (sheet #%d)\n", currentSheet, sheetCount)
 						break
 					}
 				}
@@ -111,6 +114,7 @@ func (r *SimpleODSReader) parseODSSimple(data []byte) error {
 		case xml.EndElement:
 			// End of table
 			if se.Name.Local == "table" && currentSheet != "" {
+				fmt.Printf("DEBUG ODS: Sheet '%s' finished with %d rows\n", currentSheet, rowCount)
 				currentSheet = ""
 			}
 
@@ -120,6 +124,9 @@ func (r *SimpleODSReader) parseODSSimple(data []byte) error {
 					if sheetData, exists := r.Sheets[currentSheet]; exists {
 						r.Sheets[currentSheet] = append(sheetData, currentRow)
 						rowCount++
+						if rowCount <= 7 {
+							fmt.Printf("DEBUG ODS: Row %d: %v\n", rowCount, currentRow)
+						}
 					}
 				}
 				currentRow = []string{}
