@@ -1,9 +1,13 @@
 package models
 
-import "github.com/shopspring/decimal"
+import (
+	"time"
+
+	"github.com/shopspring/decimal"
+)
 
 type Report struct {
-	Transactions []Transaction
+	Transactions []*Transaction
 	Period       DateRange
 	TotalIncome  decimal.Decimal
 	TotalExpense decimal.Decimal
@@ -26,6 +30,6 @@ type MonthSummary struct {
 }
 
 type DateRange struct {
-	From string
-	To   string
+	From time.Time
+	To   time.Time
 }
