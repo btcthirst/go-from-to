@@ -33,3 +33,4 @@ go.work.sum
 *.xlsx
 *.ods
 bin/
+workdir/

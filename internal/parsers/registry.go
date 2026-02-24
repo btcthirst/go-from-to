@@ -1,6 +1,7 @@
 package parsers
 
 import (
+	"bank-analyzer/internal/mappings"
 	"bank-analyzer/internal/models"
 	"bank-analyzer/internal/parsers/csv"
 	"bank-analyzer/internal/parsers/pdf"
@@ -12,11 +13,10 @@ type Registry struct {
 	parsers []Parser
 }
 
-func NewRegistry() *Registry {
+func NewRegistry(cfg mappings.MappingsConfig) *Registry {
 	r := &Registry{}
-
-	r.Register(csv.NewPrivatBankParser())
-	r.Register(xlsxparser.NewParser())
+	r.Register(csv.NewPrivatBankParser(cfg))
+	r.Register(xlsxparser.NewPrivatBankXLSXParser(cfg))
 	r.Register(pdf.NewParser())
 	return r
 }
@@ -35,7 +35,7 @@ func (r *Registry) Detect(filepath string) (Parser, error) {
 			return parser, nil
 		}
 	}
-	return nil, fmt.Errorf("no parser found for file: %s", filepath)
+	return nil, fmt.Errorf("невідомий формат файлу: %s", filepath)
 }
 
 func (r *Registry) ParseFile(filepath string) ([]*models.Transaction, error) {
