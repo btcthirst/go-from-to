@@ -7,12 +7,11 @@ import (
 	"log"
 	"os"
 	"strings"
-	"time"
 
 	"bank-analyzer/internal/mappings"
 	"bank-analyzer/internal/models"
+	"bank-analyzer/internal/parsers/utils"
 
-	"github.com/shopspring/decimal"
 	"golang.org/x/text/encoding/charmap"
 )
 
@@ -94,14 +93,14 @@ func (p *PrivatBankParser) Parse(filepath string) ([]*models.Transaction, error)
 
 	idx := buildIndex(header)
 
-	dateCol := firstMatch(idx, p.mapping.Get("date"))
-	amountCol := firstMatch(idx, p.mapping.Get("amount"))
-	currencyCol := firstMatch(idx, p.mapping.Get("currency"))
-	descCol := firstMatch(idx, p.mapping.Get("description"))
-	counterpartyCol := firstMatch(idx, p.mapping.Get("counterparty"))
-	ibanCol := firstMatch(idx, p.mapping.Get("iban"))
-	edropuCol := firstMatch(idx, p.mapping.Get("edrpou"))
-	docNumCol := firstMatch(idx, p.mapping.Get("doc_num"))
+	dateCol := utils.FirstMatch(idx, p.mapping.Get("date"))
+	amountCol := utils.FirstMatch(idx, p.mapping.Get("amount"))
+	currencyCol := utils.FirstMatch(idx, p.mapping.Get("currency"))
+	descCol := utils.FirstMatch(idx, p.mapping.Get("description"))
+	counterpartyCol := utils.FirstMatch(idx, p.mapping.Get("counterparty"))
+	ibanCol := utils.FirstMatch(idx, p.mapping.Get("iban"))
+	edropuCol := utils.FirstMatch(idx, p.mapping.Get("edrpou"))
+	docNumCol := utils.FirstMatch(idx, p.mapping.Get("doc_num"))
 
 	log.Printf("[PrivatBankCSV] Parse: колонки: date=%d amount=%d currency=%d desc=%d counterparty=%d iban=%d",
 		dateCol, amountCol, currencyCol, descCol, counterpartyCol, ibanCol)
@@ -139,14 +138,14 @@ func (p *PrivatBankParser) Parse(filepath string) ([]*models.Transaction, error)
 }
 
 func parseCSVRow(row []string, rowNum, dateCol, amountCol, currencyCol, descCol, counterpartyCol, ibanCol, edropuCol, docNumCol int) (*models.Transaction, error) {
-	dateRaw := safeGet(row, dateCol)
-	date, err := parseDate(dateRaw)
+	dateRaw := utils.SafeGet(row, dateCol)
+	date, err := utils.ParseDate(dateRaw)
 	if err != nil {
 		return nil, fmt.Errorf("рядок %d: дата %q: %w", rowNum, dateRaw, err)
 	}
 
-	amountRaw := safeGet(row, amountCol)
-	amt, err := parseDecimal(amountRaw)
+	amountRaw := utils.SafeGet(row, amountCol)
+	amt, err := utils.ParseDecimal(amountRaw)
 	if err != nil {
 		return nil, fmt.Errorf("рядок %d: сума %q: %w", rowNum, amountRaw, err)
 	}
@@ -160,16 +159,16 @@ func parseCSVRow(row []string, rowNum, dateCol, amountCol, currencyCol, descCol,
 		amt = amt.Abs()
 	}
 
-	currency := safeGet(row, currencyCol)
+	currency := utils.SafeGet(row, currencyCol)
 	if currency == "" {
 		currency = "UAH"
 	}
 
 	raw := make(map[string]string)
-	if v := safeGet(row, docNumCol); v != "" {
+	if v := utils.SafeGet(row, docNumCol); v != "" {
 		raw["doc_num"] = v
 	}
-	if v := safeGet(row, edropuCol); v != "" {
+	if v := utils.SafeGet(row, edropuCol); v != "" {
 		raw["edrpou"] = v
 	}
 
@@ -178,9 +177,9 @@ func parseCSVRow(row []string, rowNum, dateCol, amountCol, currencyCol, descCol,
 		Amount:       amt,
 		Type:         txType,
 		Currency:     currency,
-		Description:  safeGet(row, descCol),
-		Counterparty: safeGet(row, counterpartyCol),
-		IBAN:         safeGet(row, ibanCol),
+		Description:  utils.SafeGet(row, descCol),
+		Counterparty: utils.SafeGet(row, counterpartyCol),
+		IBAN:         utils.SafeGet(row, ibanCol),
 		Raw:          raw,
 	}, nil
 }
@@ -203,22 +202,6 @@ func buildIndex(header []string) map[string]int {
 	return idx
 }
 
-func firstMatch(idx map[string]int, candidates []string) int {
-	for _, name := range candidates {
-		if i, ok := idx[name]; ok {
-			return i
-		}
-	}
-	return -1
-}
-
-func safeGet(row []string, idx int) string {
-	if idx < 0 || idx >= len(row) {
-		return ""
-	}
-	return strings.TrimSpace(row[idx])
-}
-
 func isEmptyRow(row []string) bool {
 	for _, cell := range row {
 		if strings.TrimSpace(cell) != "" {
@@ -226,39 +209,4 @@ func isEmptyRow(row []string) bool {
 		}
 	}
 	return true
-}
-
-func parseDate(s string) (time.Time, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return time.Time{}, fmt.Errorf("порожня дата")
-	}
-	for _, layout := range []string{
-		"02.01.2006", "02.01.2006 15:04:05", "02.01.2006 15:04",
-		"2006-01-02", "2006-01-02 15:04:05", "2006-01-02T15:04:05",
-	} {
-		if t, err := time.Parse(layout, s); err == nil {
-			return t, nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("невідомий формат: %q", s)
-}
-
-func parseDecimal(s string) (decimal.Decimal, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return decimal.Zero, nil
-	}
-	s = strings.ReplaceAll(s, " ", "")
-	s = strings.ReplaceAll(s, "\u00a0", "")
-	hasDot := strings.Contains(s, ".")
-	hasComma := strings.Contains(s, ",")
-	switch {
-	case hasComma && hasDot:
-		s = strings.ReplaceAll(s, ".", "")
-		s = strings.ReplaceAll(s, ",", ".")
-	case hasComma:
-		s = strings.ReplaceAll(s, ",", ".")
-	}
-	return decimal.NewFromString(s)
 }

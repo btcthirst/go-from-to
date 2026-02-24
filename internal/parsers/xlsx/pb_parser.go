@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"log"
 	"strings"
-	"time"
 
 	"bank-analyzer/internal/mappings"
 	"bank-analyzer/internal/models"
+	"bank-analyzer/internal/parsers/utils"
 
 	"github.com/shopspring/decimal"
 	"github.com/xuri/excelize/v2"
@@ -89,15 +89,15 @@ func (p *PrivatBankXLSXParser) Parse(filepath string) ([]*models.Transaction, er
 
 	idx := buildXLSXIndex(header)
 
-	dateCol := xlsxFirstMatch(idx, p.mapping.Get("date"))
-	amountCol := xlsxFirstMatch(idx, p.mapping.Get("amount"))
-	currencyCol := xlsxFirstMatch(idx, p.mapping.Get("currency"))
-	descCol := xlsxFirstMatch(idx, p.mapping.Get("description"))
-	counterpartyCol := xlsxFirstMatch(idx, p.mapping.Get("counterparty"))
-	ibanCol := xlsxFirstMatch(idx, p.mapping.Get("iban"))
-	balanceCol := xlsxFirstMatch(idx, p.mapping.Get("balance"))
-	debitCol := xlsxFirstMatch(idx, p.mapping.Get("debit"))
-	creditCol := xlsxFirstMatch(idx, p.mapping.Get("credit"))
+	dateCol := utils.FirstMatch(idx, p.mapping.Get("date"))
+	amountCol := utils.FirstMatch(idx, p.mapping.Get("amount"))
+	currencyCol := utils.FirstMatch(idx, p.mapping.Get("currency"))
+	descCol := utils.FirstMatch(idx, p.mapping.Get("description"))
+	counterpartyCol := utils.FirstMatch(idx, p.mapping.Get("counterparty"))
+	ibanCol := utils.FirstMatch(idx, p.mapping.Get("iban"))
+	balanceCol := utils.FirstMatch(idx, p.mapping.Get("balance"))
+	debitCol := utils.FirstMatch(idx, p.mapping.Get("debit"))
+	creditCol := utils.FirstMatch(idx, p.mapping.Get("credit"))
 
 	/*log.Printf("[PrivatBankXLSX] Parse: колонки: date=%d amount=%d desc=%d currency=%d counterparty=%d iban=%d balance=%d debit=%d credit=%d",
 	dateCol, amountCol, descCol, currencyCol, counterpartyCol, ibanCol, balanceCol, debitCol, creditCol)*/
@@ -186,22 +186,6 @@ func buildXLSXIndex(header []string) map[string]int {
 	return idx
 }
 
-func xlsxFirstMatch(idx map[string]int, candidates []string) int {
-	for _, name := range candidates {
-		if i, ok := idx[name]; ok {
-			return i
-		}
-	}
-	return -1
-}
-
-func xlsxSafeGet(row []string, idx int) string {
-	if idx < 0 || idx >= len(row) {
-		return ""
-	}
-	return strings.TrimSpace(row[idx])
-}
-
 func isXLSXEmptyRow(row []string) bool {
 	for _, cell := range row {
 		if strings.TrimSpace(cell) != "" {
@@ -225,8 +209,8 @@ func isSummaryRow(row []string) bool {
 }
 
 func parseXLSXRow(row []string, rowNum, dateCol, amountCol, debitCol, creditCol, currencyCol, descCol, counterpartyCol, ibanCol, balanceCol int) (*models.Transaction, error) {
-	dateRaw := xlsxSafeGet(row, dateCol)
-	date, err := parseXLSXDate(dateRaw)
+	dateRaw := utils.SafeGet(row, dateCol)
+	date, err := utils.ParseDate(dateRaw)
 	if err != nil {
 		return nil, fmt.Errorf("дата %q: %w", dateRaw, err)
 	}
@@ -235,8 +219,8 @@ func parseXLSXRow(row []string, rowNum, dateCol, amountCol, debitCol, creditCol,
 	var txType models.TransactionType
 
 	if debitCol >= 0 || creditCol >= 0 {
-		debit, _ := parseXLSXDecimal(xlsxSafeGet(row, debitCol))
-		credit, _ := parseXLSXDecimal(xlsxSafeGet(row, creditCol))
+		debit, _ := utils.ParseDecimal(utils.SafeGet(row, debitCol))
+		credit, _ := utils.ParseDecimal(utils.SafeGet(row, creditCol))
 		if !credit.IsZero() {
 			amount, txType = credit, models.Credit
 		} else if !debit.IsZero() {
@@ -245,7 +229,7 @@ func parseXLSXRow(row []string, rowNum, dateCol, amountCol, debitCol, creditCol,
 			return nil, fmt.Errorf("рядок %d: дебет і кредит нульові", rowNum)
 		}
 	} else if amountCol >= 0 {
-		amt, err := parseXLSXDecimal(xlsxSafeGet(row, amountCol))
+		amt, err := utils.ParseDecimal(utils.SafeGet(row, amountCol))
 		if err != nil {
 			return nil, fmt.Errorf("сума: %w", err)
 		}
@@ -258,14 +242,14 @@ func parseXLSXRow(row []string, rowNum, dateCol, amountCol, debitCol, creditCol,
 		return nil, fmt.Errorf("рядок %d: не знайдено колонку суми", rowNum)
 	}
 
-	currency := xlsxSafeGet(row, currencyCol)
+	currency := utils.SafeGet(row, currencyCol)
 	if currency == "" {
 		currency = "UAH"
 	}
 
 	var balance decimal.Decimal
 	if balanceCol >= 0 {
-		balance, _ = parseXLSXDecimal(xlsxSafeGet(row, balanceCol))
+		balance, _ = utils.ParseDecimal(utils.SafeGet(row, balanceCol))
 	}
 
 	raw := make(map[string]string, len(row))
@@ -279,45 +263,10 @@ func parseXLSXRow(row []string, rowNum, dateCol, amountCol, debitCol, creditCol,
 		Amount:       amount,
 		Type:         txType,
 		Currency:     currency,
-		Description:  xlsxSafeGet(row, descCol),
-		Counterparty: xlsxSafeGet(row, counterpartyCol),
-		IBAN:         xlsxSafeGet(row, ibanCol),
+		Description:  utils.SafeGet(row, descCol),
+		Counterparty: utils.SafeGet(row, counterpartyCol),
+		IBAN:         utils.SafeGet(row, ibanCol),
 		Balance:      balance,
 		Raw:          raw,
 	}, nil
-}
-
-func parseXLSXDate(s string) (time.Time, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return time.Time{}, fmt.Errorf("порожня дата")
-	}
-	for _, layout := range []string{
-		"02.01.2006", "02.01.2006 15:04:05", "02.01.2006 15:04",
-		"2006-01-02", "2006-01-02 15:04:05", "2006-01-02T15:04:05",
-	} {
-		if t, err := time.Parse(layout, s); err == nil {
-			return t, nil
-		}
-	}
-	return time.Time{}, fmt.Errorf("невідомий формат: %q", s)
-}
-
-func parseXLSXDecimal(s string) (decimal.Decimal, error) {
-	s = strings.TrimSpace(s)
-	if s == "" {
-		return decimal.Zero, nil
-	}
-	s = strings.ReplaceAll(s, " ", "")
-	s = strings.ReplaceAll(s, "\u00a0", "")
-	hasDot := strings.Contains(s, ".")
-	hasComma := strings.Contains(s, ",")
-	switch {
-	case hasComma && hasDot:
-		s = strings.ReplaceAll(s, ".", "")
-		s = strings.ReplaceAll(s, ",", ".")
-	case hasComma:
-		s = strings.ReplaceAll(s, ",", ".")
-	}
-	return decimal.NewFromString(s)
 }

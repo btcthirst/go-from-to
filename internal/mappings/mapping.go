@@ -3,6 +3,7 @@ package mappings
 
 import (
 	"fmt"
+	"log"
 	"os"
 
 	"gopkg.in/yaml.v2"
@@ -55,12 +56,14 @@ func Load(path string) MappingsConfig {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		// Файл відсутній — використовуємо вбудовані дефолти
+		log.Printf("[mappings] warn: не вдалося розпарсити %s: %v, використовую дефолти", path, err)
 		return defaultMappings
 	}
 
 	var cfg MappingsConfig
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		// Пошкоджений YAML — використовуємо вбудовані дефолти
+		log.Printf("[mappings] warn: не вдалося розпарсити %s: %v, використовую дефолти", path, err)
 		return defaultMappings
 	}
 
