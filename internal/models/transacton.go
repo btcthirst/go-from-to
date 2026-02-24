@@ -35,3 +35,13 @@ func (t *Transaction) NetAmount() decimal.Decimal {
 	}
 	return t.Amount.Neg()
 }
+
+type TransactionDTO struct {
+	ID           string
+	Date         string
+	Amount       float64
+	Type         TransactionType
+	Currency     string
+	Counterparty string
+	Category     string
+}

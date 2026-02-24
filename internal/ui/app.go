@@ -3,6 +3,7 @@ package ui
 
 import (
 	"log"
+	"sync"
 
 	"bank-analyzer/internal/categoryzer"
 	"bank-analyzer/internal/config"
@@ -18,6 +19,7 @@ import (
 
 // AppState — спільний стан застосунку, доступний усім екранам.
 type AppState struct {
+	mu           sync.RWMutex
 	Transactions []*models.Transaction
 	Registry     *parsers.Registry
 	Categorizer  *categoryzer.RulesCategorizer
@@ -26,6 +28,24 @@ type AppState struct {
 	// OnTransactionsChanged викликається після будь-якої зміни Transactions
 	// (імпорт, очищення). Екрани підписуються на цей колбек для оновлення.
 	OnTransactionsChanged func()
+}
+
+func (s *AppState) AppendTransactions(txs []*models.Transaction) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.Transactions = append(s.Transactions, txs...)
+}
+
+func (s *AppState) GetTransactions() []*models.Transaction {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.Transactions
+}
+
+func (s *AppState) ClearTransactions() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.Transactions = []*models.Transaction{}
 }
 
 // NotifyTransactionsChanged безпечно викликає колбек, якщо він встановлений.
@@ -48,6 +68,7 @@ func Run() {
 	}
 
 	state := &AppState{
+		mu:           sync.RWMutex{},
 		Transactions: make([]*models.Transaction, 0),
 		Registry:     registry,
 		Categorizer:  cat,
