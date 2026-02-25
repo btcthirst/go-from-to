@@ -1,4 +1,4 @@
-// Package models contains the data structures and types used in the application, such as transactions, accounts, and other related entities. It serves as a central place for defining the core data models that are used throughout the application.
+// Package models contains the data structures and types used in the application.
 package models
 
 import (
@@ -36,6 +36,22 @@ func (t *Transaction) NetAmount() decimal.Decimal {
 	return t.Amount.Neg()
 }
 
+// ToDTO конвертує Transaction у TransactionDTO для збереження/передачі.
+func (t *Transaction) ToDTO() TransactionDTO {
+	amt, _ := t.Amount.Float64()
+	return TransactionDTO{
+		ID:           t.ID,
+		Date:         t.Date.Format("02.01.2006"),
+		Amount:       amt,
+		Type:         t.Type,
+		Currency:     t.Currency,
+		Counterparty: t.Counterparty,
+		Category:     t.Category,
+	}
+}
+
+// TransactionDTO — спрощена структура для збереження/експорту транзакцій.
+// Не містить службових полів (Raw, IBAN, BankSource).
 type TransactionDTO struct {
 	ID           string
 	Date         string
@@ -44,4 +60,21 @@ type TransactionDTO struct {
 	Currency     string
 	Counterparty string
 	Category     string
+}
+
+// TypeLabel повертає людиночитабельну назву типу транзакції.
+func (d TransactionDTO) TypeLabel() string {
+	if d.Type == Debit {
+		return "Витрата"
+	}
+	return "Надходження"
+}
+
+// ToTransactions конвертує зріз Transaction у зріз TransactionDTO.
+func ToTransactions(txs []*Transaction) []TransactionDTO {
+	result := make([]TransactionDTO, len(txs))
+	for i, tx := range txs {
+		result[i] = tx.ToDTO()
+	}
+	return result
 }

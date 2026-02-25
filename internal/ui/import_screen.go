@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"bank-analyzer/internal/models"
@@ -35,6 +36,7 @@ func (f *loadedFile) statusText() string {
 
 // NewImportScreen повертає екран імпорту файлів.
 func NewImportScreen(state *AppState) fyne.CanvasObject {
+	var mu sync.RWMutex
 	var files []loadedFile
 
 	win := fyne.CurrentApp().Driver().AllWindows()[0]
@@ -106,9 +108,9 @@ func NewImportScreen(state *AppState) fyne.CanvasObject {
 			importedAt: time.Now(),
 		}
 		fyne.Do(func() {
-			state.mu.Lock()
+			mu.Lock()
 			files = append(files, pending)
-			state.mu.Unlock()
+			mu.Unlock()
 			fileList.Refresh()
 		})
 
@@ -131,7 +133,8 @@ func NewImportScreen(state *AppState) fyne.CanvasObject {
 
 		// Оновлення стану і UI — тільки в головному потоці
 		fyne.Do(func() {
-
+			mu.Lock()
+			defer mu.Unlock()
 			// Знайти і оновити pending-запис
 			for i := range files {
 				if files[i].path == path && files[i].bankName == "завантаження..." {

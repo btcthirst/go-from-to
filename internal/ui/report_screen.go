@@ -22,7 +22,7 @@ const dateLayout = "02.01.2006"
 // reportOptions зберігає всі налаштування генерації звіту.
 type reportOptions struct {
 	templatePath    string
-	from, to        time.Time // нульові — без фільтру
+	from, to        time.Time
 	includeSummary  bool
 	includeCategory bool
 	includeMonthly  bool
@@ -81,7 +81,6 @@ func NewReportScreen(state *AppState) fyne.CanvasObject {
 	toEntry := widget.NewEntry()
 	toEntry.SetPlaceHolder("дд.мм.рррр")
 
-	// Валідація дат — підсвічує поле червоним при невалідному вводі
 	validateDate := func(entry *widget.Entry, target *time.Time) {
 		raw := entry.Text
 		if raw == "" {
@@ -98,10 +97,6 @@ func NewReportScreen(state *AppState) fyne.CanvasObject {
 		entry.SetValidationError(nil)
 	}
 
-	fromEntry.OnChanged = func(s string) { validateDate(fromEntry, &opts.from) }
-	toEntry.OnChanged = func(s string) { validateDate(toEntry, &opts.to) }
-
-	// Кнопки швидкого вибору діапазону
 	setRange := func(months int) {
 		now := time.Now()
 		from := now.AddDate(0, -months, 0)
@@ -131,10 +126,11 @@ func NewReportScreen(state *AppState) fyne.CanvasObject {
 	includeMonthly.SetChecked(true)
 	includeChart.SetChecked(true)
 
-	// --- Попередній перегляд (preview) ---
+	// --- Попередній перегляд ---
 	previewLabel := widget.NewRichTextFromMarkdown("")
+
 	refreshPreview := func() {
-		txs := filterByDate(state.Transactions, opts.from, opts.to)
+		txs := filterByDate(state.GetTransactions(), opts.from, opts.to)
 		if len(txs) == 0 {
 			previewLabel.ParseMarkdown("_Немає транзакцій для обраного діапазону_")
 			return
@@ -167,15 +163,36 @@ func NewReportScreen(state *AppState) fyne.CanvasObject {
 	statusLabel := widget.NewLabel("")
 	statusLabel.Alignment = fyne.TextAlignCenter
 
-	// --- Кнопка генерації ---
+	// runInBackground виконує fn в горутині, блокує кнопки і показує прогрес.
+	runInBackground := func(buttons []*widget.Button, fn func() error, onDone func(err error)) {
+		for _, btn := range buttons {
+			btn.Disable()
+		}
+		fyne.Do(func() {
+			progress.Show()
+			statusLabel.SetText("Генерація...")
+		})
+		go func() {
+			err := fn()
+			fyne.Do(func() {
+				progress.Hide()
+				for _, btn := range buttons {
+					btn.Enable()
+				}
+				onDone(err)
+			})
+		}()
+	}
+
+	// --- Кнопка повного звіту ---
 	var generateBtn *widget.Button
+	var exportDTOBtn *widget.Button
+
 	generateBtn = widget.NewButtonWithIcon("Згенерувати звіт", theme.DocumentSaveIcon(), func() {
-		if len(state.Transactions) == 0 {
+		if len(state.GetTransactions()) == 0 {
 			dialog.ShowInformation("Немає даних", "Спочатку імпортуйте банківські виписки.", win)
 			return
 		}
-
-		defaultName := defaultFileName(formatSelect.Selected)
 
 		d := dialog.NewFileSave(func(writer fyne.URIWriteCloser, err error) {
 			if err != nil {
@@ -188,38 +205,84 @@ func NewReportScreen(state *AppState) fyne.CanvasObject {
 			outputPath := writer.URI().Path()
 			writer.Close()
 
-			fyne.Do(func() {
-				generateBtn.Disable()
-				progress.Show()
-				statusLabel.SetText("Генерація звіту...")
-			})
+			report := buildReport(state, opts)
 
-			go func() {
-				report := buildReport(state, opts)
-				genErr := generateReport(formatSelect.Selected, opts.templatePath, report, outputPath)
-
-				fyne.Do(func() {
-					progress.Hide()
-					generateBtn.Enable()
-
-					if genErr != nil {
+			runInBackground(
+				[]*widget.Button{generateBtn, exportDTOBtn},
+				func() error {
+					return generateReport(formatSelect.Selected, opts.templatePath, report, outputPath)
+				},
+				func(err error) {
+					if err != nil {
 						statusLabel.SetText("Помилка генерації")
-						dialog.ShowError(genErr, win)
+						dialog.ShowError(err, win)
 						return
 					}
 					statusLabel.SetText(fmt.Sprintf("Збережено: %s", outputPath))
 					dialog.ShowInformation("Готово", "Звіт успішно збережено!", win)
-				})
-			}()
+				},
+			)
 		}, win)
 
-		d.SetFileName(defaultName)
+		d.SetFileName(defaultFileName(formatSelect.Selected))
 		d.SetFilter(newFormatFilter(formatSelect.Selected))
 		d.Show()
 	})
 	generateBtn.Importance = widget.HighImportance
 
-	// При зміні формату — оновити фільтр шаблону і назву файлу
+	// --- Кнопка експорту через DTO ---
+	exportDTOBtn = widget.NewButtonWithIcon("Експорт (DTO)", theme.DownloadIcon(), func() {
+		txs := state.GetTransactions()
+		if len(txs) == 0 {
+			dialog.ShowInformation("Немає даних", "Спочатку імпортуйте банківські виписки.", win)
+			return
+		}
+
+		// Конвертуємо у DTO до відкриття діалогу збереження —
+		// щоб не тримати посилання на стан під час асинхронної операції.
+		filtered := filterByDate(txs, opts.from, opts.to)
+		dtos := models.ToTransactions(filtered)
+
+		d := dialog.NewFileSave(func(writer fyne.URIWriteCloser, err error) {
+			if err != nil {
+				dialog.ShowError(err, win)
+				return
+			}
+			if writer == nil {
+				return
+			}
+			outputPath := writer.URI().Path()
+			writer.Close()
+
+			selectedFormat := formatSelect.Selected
+			runInBackground(
+				[]*widget.Button{generateBtn, exportDTOBtn},
+				func() error {
+					return generateReportDTO(selectedFormat, opts.templatePath, dtos, outputPath)
+				},
+				func(genErr error) {
+					if genErr != nil {
+						statusLabel.SetText("Помилка експорту")
+						dialog.ShowError(genErr, win)
+						return
+					}
+					statusLabel.SetText(fmt.Sprintf("DTO експорт збережено: %s", outputPath))
+					dialog.ShowInformation("Готово",
+						fmt.Sprintf("Експортовано %d транзакцій.", len(dtos)), win)
+				},
+			)
+		}, win)
+
+		ext := "xlsx"
+		if formatSelect.Selected == "ODS" {
+			ext = "ods"
+		}
+		d.SetFileName("export_dto_" + time.Now().Format("2006-01-02") + "." + ext)
+		d.SetFilter(newFormatFilter(formatSelect.Selected))
+		d.Show()
+	})
+	exportDTOBtn.Importance = widget.MediumImportance
+
 	formatSelect.OnChanged = func(s string) {
 		opts.templatePath = ""
 		templateLabel.SetText("не обрано")
@@ -256,11 +319,17 @@ func NewReportScreen(state *AppState) fyne.CanvasObject {
 
 	previewCard := widget.NewCard("Попередній перегляд", "", previewLabel)
 
+	// Пояснення різниці між кнопками
+	dtoHint := widget.NewLabel("Експорт (DTO) — спрощений формат: ID, дата, тип, сума, валюта, контрагент, категорія.")
+	dtoHint.Importance = widget.LowImportance
+	dtoHint.Wrapping = fyne.TextWrapWord
+
 	bottom := container.NewVBox(
 		widget.NewSeparator(),
 		progress,
 		statusLabel,
-		generateBtn,
+		container.NewGridWithColumns(2, generateBtn, exportDTOBtn),
+		dtoHint,
 	)
 
 	content := container.NewVScroll(container.NewVBox(
@@ -272,11 +341,10 @@ func NewReportScreen(state *AppState) fyne.CanvasObject {
 	return container.NewBorder(nil, bottom, nil, nil, content)
 }
 
-// --- Бізнес-логіка (винесена з UI) ---
+// --- Бізнес-логіка ---
 
-// buildReport агрегує транзакції у звіт згідно з options.
 func buildReport(state *AppState, opts reportOptions) *models.Report {
-	txs := filterByDate(state.Transactions, opts.from, opts.to)
+	txs := filterByDate(state.GetTransactions(), opts.from, opts.to)
 
 	report := &models.Report{
 		Transactions: txs,
@@ -294,7 +362,6 @@ func buildReport(state *AppState, opts reportOptions) *models.Report {
 	var totalExpense decimal.Decimal
 
 	for _, tx := range txs {
-		// Period
 		if tx.Date.Before(report.Period.From) {
 			report.Period.From = tx.Date
 		}
@@ -302,7 +369,6 @@ func buildReport(state *AppState, opts reportOptions) *models.Report {
 			report.Period.To = tx.Date
 		}
 
-		// Totals
 		if tx.Type == models.Credit {
 			report.TotalIncome = report.TotalIncome.Add(tx.Amount)
 		} else {
@@ -310,7 +376,6 @@ func buildReport(state *AppState, opts reportOptions) *models.Report {
 			totalExpense = totalExpense.Add(tx.Amount)
 		}
 
-		// ByCategory
 		if opts.includeCategory {
 			cs := report.ByCategory[tx.Category]
 			cs.Category = tx.Category
@@ -319,7 +384,6 @@ func buildReport(state *AppState, opts reportOptions) *models.Report {
 			report.ByCategory[tx.Category] = cs
 		}
 
-		// ByMonth
 		if opts.includeMonthly {
 			key := tx.Date.Format("2006-01")
 			ms := report.ByMonth[key]
@@ -335,7 +399,6 @@ func buildReport(state *AppState, opts reportOptions) *models.Report {
 
 	report.NetBalance = report.TotalIncome.Sub(report.TotalExpense)
 
-	// Відсотки по категоріях
 	if opts.includeCategory && !totalExpense.IsZero() {
 		for key, cs := range report.ByCategory {
 			f, _ := cs.Total.Div(totalExpense).Mul(decimal.NewFromInt(100)).Float64()
@@ -347,21 +410,32 @@ func buildReport(state *AppState, opts reportOptions) *models.Report {
 	return report
 }
 
-// generateReport вибирає репортер за форматом і запускає генерацію.
 func generateReport(format, templatePath string, report *models.Report, outputPath string) error {
 	switch format {
 	case "XLSX":
 		r := &reports.XLSXReporter{TemplatePath: templatePath}
 		return r.Generate(report, outputPath)
 	case "ODS":
-		return fmt.Errorf("формат ODS ще не підтримується")
+		r := &reports.ODSReporter{}
+		return r.Generate(report, outputPath)
 	default:
 		return fmt.Errorf("невідомий формат: %s", format)
 	}
 }
 
-// filterByDate повертає транзакції що потрапляють у діапазон [from, to].
-// Нульові значення from/to — без обмеження з відповідного боку.
+func generateReportDTO(format, templatePath string, dtos []models.TransactionDTO, outputPath string) error {
+	switch format {
+	case "XLSX":
+		r := &reports.XLSXReporter{TemplatePath: templatePath}
+		return r.GenerateFromDTO(dtos, outputPath)
+	case "ODS":
+		r := &reports.ODSReporter{}
+		return r.GenerateFromDTO(dtos, outputPath)
+	default:
+		return fmt.Errorf("невідомий формат: %s", format)
+	}
+}
+
 func filterByDate(txs []*models.Transaction, from, to time.Time) []*models.Transaction {
 	if from.IsZero() && to.IsZero() {
 		return txs
@@ -379,7 +453,6 @@ func filterByDate(txs []*models.Transaction, from, to time.Time) []*models.Trans
 	return result
 }
 
-// calcTotals підраховує суму надходжень і витрат.
 func calcTotals(txs []*models.Transaction) (income, expense decimal.Decimal) {
 	for _, tx := range txs {
 		if tx.Type == models.Credit {
@@ -391,23 +464,17 @@ func calcTotals(txs []*models.Transaction) (income, expense decimal.Decimal) {
 	return
 }
 
-// defaultFileName повертає дефолтну назву файлу звіту.
 func defaultFileName(format string) string {
 	date := time.Now().Format("2006-01-02")
-	switch format {
-	case "ODS":
+	if format == "ODS" {
 		return fmt.Sprintf("звіт_%s.ods", date)
-	default:
-		return fmt.Sprintf("звіт_%s.xlsx", date)
 	}
+	return fmt.Sprintf("звіт_%s.xlsx", date)
 }
 
-// newFormatFilter повертає фільтр розширень для діалогу збереження/вибору.
 func newFormatFilter(format string) storage.FileFilter {
-	switch format {
-	case "ODS":
+	if format == "ODS" {
 		return storage.NewExtensionFileFilter([]string{".ods"})
-	default:
-		return storage.NewExtensionFileFilter([]string{".xlsx"})
 	}
+	return storage.NewExtensionFileFilter([]string{".xlsx"})
 }
