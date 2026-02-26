@@ -117,7 +117,9 @@ func (p *PrivatBankXLSXParser) Parse(filepath string) ([]*models.Transaction, er
 			log.Printf("[PrivatBankXLSX] зупинка на підсумковому рядку %d", rowNum+headerIdx+2)
 			break
 		}
+
 		tx, err := parseXLSXRow(row, rowNum+headerIdx+2, dateCol, amountCol, debitCol, creditCol, currencyCol, descCol, counterpartyCol, ibanCol, balanceCol)
+
 		if err != nil {
 			log.Printf("[PrivatBankXLSX] пропущено рядок %d: %v | %v", rowNum+headerIdx+2, err, row)
 			skipped++
@@ -126,8 +128,6 @@ func (p *PrivatBankXLSXParser) Parse(filepath string) ([]*models.Transaction, er
 		tx.BankSource = "privatbank"
 		txs = append(txs, tx)
 	}
-
-	//log.Printf("[PrivatBankXLSX] Parse: імпортовано=%d, пропущено=%d", len(txs), skipped)
 
 	if len(txs) == 0 {
 		return nil, fmt.Errorf("не знайдено жодної транзакції (пропущено: %d)", skipped)
@@ -254,6 +254,7 @@ func parseXLSXRow(row []string, rowNum, dateCol, amountCol, debitCol, creditCol,
 
 	raw := make(map[string]string, len(row))
 	for i, cell := range row {
+		fmt.Println(cell)
 		colName, _ := excelize.ColumnNumberToName(i + 1)
 		raw[colName] = cell
 	}
