@@ -24,9 +24,16 @@ type Transaction struct {
 	Counterparty string
 	IBAN         string
 	Category     string
-	Balance      decimal.Decimal
-	BankSource   string
-	Raw          map[string]string
+	// Provider — ідентифікований постачальник/платник для звіту.
+	// Заповнюється після категоризації через ProviderResolver.
+	// Приклади: "ПДФО 18%", "вувкг", "Пупкін А.Ф(40160)"
+	Provider string
+	// ProviderManual — true якщо Provider встановлено вручну користувачем.
+	// ProviderResolver не перезаписує поле якщо цей прапор встановлено.
+	ProviderManual bool
+	Balance        decimal.Decimal
+	BankSource     string
+	Raw            map[string]string
 }
 
 func (t *Transaction) NetAmount() decimal.Decimal {
@@ -47,11 +54,11 @@ func (t *Transaction) ToDTO() TransactionDTO {
 		Currency:     t.Currency,
 		Counterparty: t.Counterparty,
 		Category:     t.Category,
+		Provider:     t.Provider,
 	}
 }
 
 // TransactionDTO — спрощена структура для збереження/експорту транзакцій.
-// Не містить службових полів (Raw, IBAN, BankSource).
 type TransactionDTO struct {
 	ID           string
 	Date         string
@@ -60,6 +67,7 @@ type TransactionDTO struct {
 	Currency     string
 	Counterparty string
 	Category     string
+	Provider     string
 }
 
 // TypeLabel повертає людиночитабельну назву типу транзакції.

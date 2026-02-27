@@ -1,48 +1,35 @@
 package config
 
-import "strings"
+import (
+	"bank-analyzer/internal/mappings"
+	"strings"
+)
 
 // CategoryNames повертає список назв усіх категорій.
 func (c *Config) CategoryNames() []string {
-	return c.categoryNames
+	return c.Categories.Names()
 }
 
 // KeywordsForCategory повертає ключові слова для конкретної категорії.
 func (c *Config) KeywordsForCategory(category string) []string {
-	keywords, ok := c.keywords[category]
-	if !ok {
-		return nil
-	}
-	// Повертаємо копію щоб уникнути зовнішньої мутації
-	result := make([]string, len(keywords))
-	copy(result, keywords)
-	return result
+	return c.Categories.KeywordsFor(category)
 }
 
 // AddCategory додає нову порожню категорію.
 func (c *Config) AddCategory(name string) {
-	// Уникаємо дублікатів
-	for _, existing := range c.categoryNames {
+	for _, existing := range c.Categories.Names() {
 		if strings.EqualFold(existing, name) {
 			return
 		}
 	}
-	c.categoryNames = append(c.categoryNames, name)
-	if c.keywords == nil {
-		c.keywords = make(map[string][]string)
-	}
-	c.keywords[name] = []string{}
+	if _, exists := c.Categories[name]; !exists {
+		c.Categories[name] = mappings.CategoryRule{}
+	} // ініціалізує порожнім значенням якщо нема
 }
 
 // RemoveCategory видаляє категорію та її ключові слова.
 func (c *Config) RemoveCategory(name string) {
-	for i, cat := range c.categoryNames {
-		if cat == name {
-			c.categoryNames = append(c.categoryNames[:i], c.categoryNames[i+1:]...)
-			break
-		}
-	}
-	delete(c.keywords, name)
+	delete(c.Categories, name)
 }
 
 // AddKeyword додає ключове слово до категорії.
@@ -51,21 +38,23 @@ func (c *Config) AddKeyword(category, keyword string) {
 	if kw == "" {
 		return
 	}
-	// Уникаємо дублікатів
-	for _, existing := range c.keywords[category] {
+	rule := c.Categories[category]
+	for _, existing := range rule.Keywords {
 		if existing == kw {
 			return
 		}
 	}
-	c.keywords[category] = append(c.keywords[category], kw)
+	rule.Keywords = append(rule.Keywords, kw)
+	c.Categories[category] = rule
 }
 
 // RemoveKeyword видаляє ключове слово з категорії.
 func (c *Config) RemoveKeyword(category, keyword string) {
-	kws := c.keywords[category]
-	for i, kw := range kws {
+	rule := c.Categories[category]
+	for i, kw := range rule.Keywords {
 		if kw == keyword {
-			c.keywords[category] = append(kws[:i], kws[i+1:]...)
+			rule.Keywords = append(rule.Keywords[:i], rule.Keywords[i+1:]...)
+			c.Categories[category] = rule
 			return
 		}
 	}

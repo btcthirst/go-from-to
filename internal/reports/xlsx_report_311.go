@@ -221,7 +221,7 @@ func write311Data(
 		amt, _ := tx.Amount.Float64()
 
 		setv311(f, sheet, 1, row, i+1, txtSt)
-		setv311(f, sheet, 2, row, tx.Counterparty, txtSt)
+		setv311(f, sheet, 2, row, tx.Provider, txtSt)
 		setv311(f, sheet, 3, row, tx.Date.Format("02.01.2006"), txtSt)
 
 		dAddr := a311(4, row)

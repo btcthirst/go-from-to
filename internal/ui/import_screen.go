@@ -129,6 +129,7 @@ func NewImportScreen(state *AppState) fyne.CanvasObject {
 		// Категоризація — теж поза UI-потоком
 		if parseErr == nil {
 			state.Categorizer.CategorizeAll(txs)
+			state.Resolver.ResolveAll(txs)
 		}
 
 		// Оновлення стану і UI — тільки в головному потоці

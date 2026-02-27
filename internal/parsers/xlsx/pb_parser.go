@@ -254,7 +254,6 @@ func parseXLSXRow(row []string, rowNum, dateCol, amountCol, debitCol, creditCol,
 
 	raw := make(map[string]string, len(row))
 	for i, cell := range row {
-		fmt.Println(cell)
 		colName, _ := excelize.ColumnNumberToName(i + 1)
 		raw[colName] = cell
 	}

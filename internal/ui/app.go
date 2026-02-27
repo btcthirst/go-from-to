@@ -2,10 +2,9 @@
 package ui
 
 import (
-	"log"
 	"sync"
 
-	"bank-analyzer/internal/categoryzer"
+	"bank-analyzer/internal/categorizer"
 	"bank-analyzer/internal/config"
 	"bank-analyzer/internal/models"
 	"bank-analyzer/internal/parsers"
@@ -22,7 +21,8 @@ type AppState struct {
 	mu           sync.RWMutex
 	Transactions []*models.Transaction
 	Registry     *parsers.Registry
-	Categorizer  *categoryzer.RulesCategorizer
+	Categorizer  *categorizer.RulesCategorizer
+	Resolver     *categorizer.ProviderResolver
 	Config       *config.Config
 
 	// OnTransactionsChanged викликається після будь-якої зміни Transactions
@@ -59,19 +59,15 @@ func Run() {
 	cfg := config.Load()
 	registry := parsers.NewRegistry(cfg.Mappings)
 
-	cat, err := categoryzer.NewRulesCategorizer(cfg.ConfigPath)
-	if err != nil {
-		// Не падаємо — запускаємось з порожнім категоризатором і логуємо проблему.
-		// Користувач побачить транзакції без категорій, але застосунок працює.
-		log.Printf("WARNING: не вдалося завантажити rules категоризатора (%s): %v. Запуск без категоризації.", cfg.ConfigPath, err)
-		cat = categoryzer.NewEmptyCategorizer()
-	}
+	cat := categorizer.NewRulesCategorizer(cfg.Categories)
+	resolv := categorizer.NewProviderResolver(cfg.Providers)
 
 	state := &AppState{
 		mu:           sync.RWMutex{},
 		Transactions: make([]*models.Transaction, 0),
 		Registry:     registry,
 		Categorizer:  cat,
+		Resolver:     resolv,
 		Config:       cfg,
 	}
 

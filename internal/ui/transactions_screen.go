@@ -2,7 +2,9 @@ package ui
 
 import (
 	"bank-analyzer/internal/models"
+	"bank-analyzer/internal/ui/widgets"
 	"fmt"
+	"sort"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -11,20 +13,30 @@ import (
 	"fyne.io/fyne/v2/widget"
 )
 
+// Порядок колонок таблиці транзакцій.
 const (
 	colDate        = 0
 	colType        = 1
 	colAmount      = 2
-	colCategory    = 3
-	colDescription = 4
-	colCounterpart = 5
-	colSource      = 6
-	colCount       = 7
+	colProvider    = 3 // ← переміщено на 3-тю позицію
+	colCategory    = 4
+	colDescription = 5
+	colCounterpart = 6
+	colSource      = 7
+	colCount       = 8
 )
 
-var tableHeaders = []string{"Дата", "Тип", "Сума", "Категорія", "Опис", "Контрагент", "Джерело"}
+var tableHeaders = []string{
+	"Дата", "Тип", "Сума", "Постачальник", "Категорія", "Опис", "Контрагент", "Джерело",
+}
 
-var columnWidths = []float32{100, 110, 130, 150, 280, 200, 110}
+// Мінімальні ширини колонок. Користувач може розтягувати таблицю —
+// Fyne дозволяє SetColumnWidth але не drag-resize нативно, тому для довгих
+// клітинок використовуємо tooltip.
+var columnWidths = []float32{100, 110, 110, 160, 110, 260, 180, 90}
+
+// maxLen — після якої кількості рун показуємо "..." і вмикаємо tooltip.
+const maxLen = 32
 
 func NewTransactionsScreen(state *AppState) fyne.CanvasObject {
 	// --- Фільтри ---
@@ -37,73 +49,79 @@ func NewTransactionsScreen(state *AppState) fyne.CanvasObject {
 	typeSelect := widget.NewSelect([]string{"Всі", "Витрати", "Надходження"}, nil)
 	typeSelect.SetSelected("Всі")
 
-	// Статус-рядок
 	statusLabel := widget.NewLabel("")
 
 	// --- Кеш відфільтрованих транзакцій ---
-	// Єдине місце, де filtered() викликається — в refreshCache.
-	// Таблиця читає тільки з cachedTxs, не викликаючи filtered() на кожну клітинку.
 	var cachedTxs []*models.Transaction
 
 	refreshCache := func() {
 		cachedTxs = filtered(state, searchEntry.Text, categorySelect.Selected, typeSelect.Selected)
 		statusLabel.SetText(fmt.Sprintf("Знайдено: %d транзакцій", len(cachedTxs)))
 	}
-
-	// Ініціалізуємо кеш одразу
 	refreshCache()
 
 	// --- Таблиця ---
+	// CreateItem повертає TooltipLabel для всіх клітинок — це дозволяє
+	// показувати повний текст при наведенні на будь-яку обрізану клітинку.
 	table := widget.NewTable(
 		func() (rows, cols int) {
-			return len(cachedTxs) + 1, colCount // +1 — рядок заголовків
+			return len(cachedTxs) + 1, colCount
 		},
 		func() fyne.CanvasObject {
-			return widget.NewLabel("")
+			return widgets.NewTooltipLabel("", "")
 		},
 		func(id widget.TableCellID, cell fyne.CanvasObject) {
-			label := cell.(*widget.Label)
+			lbl := cell.(*widgets.TooltipLabel)
 
 			// Рядок заголовків
 			if id.Row == 0 {
-				label.TextStyle = fyne.TextStyle{Bold: true}
-				label.SetText(tableHeaders[id.Col])
+				lbl.Style = fyne.TextStyle{Bold: true}
+				lbl.SetTexts(tableHeaders[id.Col], "")
 				return
 			}
 
-			// Захист від виходу за межі під час рефрешу
 			if id.Row-1 >= len(cachedTxs) {
-				label.SetText("")
+				lbl.SetTexts("", "")
 				return
 			}
 
+			lbl.Style = fyne.TextStyle{}
 			tx := cachedTxs[id.Row-1]
-			label.TextStyle = fyne.TextStyle{}
 
 			switch id.Col {
 			case colDate:
-				label.SetText(tx.Date.Format("02.01.2006"))
+				v := tx.Date.Format("02.01.2006")
+				lbl.SetTexts(v, "")
+
 			case colType:
 				if tx.Type == models.Debit {
-					label.SetText("↑ Витрата")
+					lbl.SetTexts("↑ Витрата", "")
 				} else {
-					label.SetText("↓ Надходження")
+					lbl.SetTexts("↓ Надходження", "")
 				}
+
 			case colAmount:
-				label.SetText(tx.Amount.StringFixed(2) + " " + tx.Currency)
+				v := tx.Amount.StringFixed(2) + " " + tx.Currency
+				lbl.SetTexts(v, "")
+
+			case colProvider:
+				lbl.SetTexts(truncate(tx.Provider, maxLen), tx.Provider)
+
 			case colCategory:
-				label.SetText(tx.Category)
+				lbl.SetTexts(truncate(tx.Category, maxLen), tx.Category)
+
 			case colDescription:
-				label.SetText(truncate(tx.Description, 40))
+				lbl.SetTexts(truncate(tx.Description, maxLen), tx.Description)
+
 			case colCounterpart:
-				label.SetText(tx.Counterparty)
+				lbl.SetTexts(truncate(tx.Counterparty, maxLen), tx.Counterparty)
+
 			case colSource:
-				label.SetText(tx.BankSource)
+				lbl.SetTexts(tx.BankSource, "")
 			}
 		},
 	)
 
-	// Ширини колонок
 	for i, w := range columnWidths {
 		table.SetColumnWidth(i, w)
 	}
@@ -115,13 +133,12 @@ func NewTransactionsScreen(state *AppState) fyne.CanvasObject {
 		}
 		tx := cachedTxs[id.Row-1]
 		showCategoryEditor(tx, state, func() {
-			// Після зміни категорії — оновити кеш і таблицю
 			refreshCache()
 			table.Refresh()
 		})
 	}
 
-	// --- Підключення фільтрів ---
+	// --- Фільтри ---
 	applyFilters := func(_ string) {
 		refreshCache()
 		table.Refresh()
@@ -131,7 +148,6 @@ func NewTransactionsScreen(state *AppState) fyne.CanvasObject {
 	categorySelect.OnChanged = applyFilters
 	typeSelect.OnChanged = applyFilters
 
-	// --- Кнопка скидання фільтрів ---
 	resetBtn := widget.NewButton("Скинути", func() {
 		searchEntry.SetText("")
 		categorySelect.ClearSelected()
@@ -153,16 +169,10 @@ func NewTransactionsScreen(state *AppState) fyne.CanvasObject {
 	return container.NewBorder(filterBar, statusLabel, nil, nil, table)
 }
 
-// Refresh дозволяє зовнішньому коду (наприклад, після імпорту) оновити екран.
-// Використовується через type assertion: screen.(*transactionsScreen) якщо потрібно,
-// або простіше — зберігати refreshCache як поле AppState.
-// Поки достатньо викликати table.Refresh() через fyne.Do після імпорту.
-
 // --- Фільтрація ---
 
 func filtered(state *AppState, search, category, txType string) []*models.Transaction {
 	result := make([]*models.Transaction, 0, len(state.Transactions))
-
 	for _, tx := range state.Transactions {
 		if search != "" &&
 			!containsIgnoreCase(tx.Description, search) &&
@@ -180,13 +190,11 @@ func filtered(state *AppState, search, category, txType string) []*models.Transa
 		}
 		result = append(result, tx)
 	}
-
 	return result
 }
 
 // --- Допоміжні функції ---
 
-// truncate скорочує рядок до max рун (не байтів), додаючи "..." в кінці.
 func truncate(s string, max int) string {
 	runes := []rune(s)
 	if len(runes) <= max {
@@ -195,8 +203,6 @@ func truncate(s string, max int) string {
 	return string(runes[:max-3]) + "..."
 }
 
-// containsIgnoreCase перевіряє наявність підрядка без урахування регістру,
-// коректно працює з кирилицею через strings.ToLower (Unicode-aware).
 func containsIgnoreCase(str, substr string) bool {
 	if substr == "" {
 		return true
@@ -204,34 +210,108 @@ func containsIgnoreCase(str, substr string) bool {
 	return strings.Contains(strings.ToLower(str), strings.ToLower(substr))
 }
 
-// --- Діалог редагування категорії ---
+// --- Діалог редагування транзакції ---
 
-// showCategoryEditor відкриває діалог зміни категорії транзакції.
-// onSave викликається після підтвердження зміни.
+// showCategoryEditor відкриває діалог редагування категорії та постачальника.
 func showCategoryEditor(tx *models.Transaction, state *AppState, onSave func()) {
-	selected := tx.Category
+	win := fyne.CurrentApp().Driver().AllWindows()[0]
 
+	// --- Категорія ---
+	selectedCategory := tx.Category
 	categorySelect := widget.NewSelect(state.Config.CategoryNames(), func(s string) {
-		selected = s
+		selectedCategory = s
 	})
 	categorySelect.SetSelected(tx.Category)
 
-	win := fyne.CurrentApp().Driver().AllWindows()[0]
+	// --- Постачальник ---
+	// Для категорії "Внески" — AutocompleteEntry з довідника + Select.
+	// Для решти — звичайний Entry без автодоповнення.
+	providerOptions := buildProviderOptions(state)
+
+	var providerEntry interface {
+		SetText(string)
+		fyne.CanvasObject
+	}
+	var providerSuggestions fyne.CanvasObject
+
+	if tx.Category == "Внески" {
+		ac := widgets.NewAutocompleteEntry(providerOptions)
+		ac.SetText(tx.Provider)
+		ac.SetPlaceHolder("Постачальник...")
+		providerEntry = ac
+		providerSuggestions = ac.SuggestionsBox
+	} else {
+		e := widget.NewEntry()
+		e.SetText(tx.Provider)
+		e.SetPlaceHolder("Постачальник...")
+		providerEntry = e
+		providerSuggestions = nil
+	}
+
+	// Select з довідника — тільки для Внесків
+	providerSelectRow := container.NewVBox()
+	if tx.Category == "Внески" && len(providerOptions) > 0 {
+		providerSelect := widget.NewSelect(providerOptions, func(s string) {
+			providerEntry.SetText(s)
+		})
+		providerSelect.PlaceHolder = "Обрати з довідника..."
+		providerSelectRow.Objects = []fyne.CanvasObject{
+			widget.NewLabel("Або обрати з довідника:"),
+			providerSelect,
+		}
+	}
+
+	categorySelect.OnChanged = func(s string) {
+		selectedCategory = s
+	}
+
+	manualCheck := widget.NewCheck("Зафіксувати вручну (не перезаписувати)", func(_ bool) {})
+	manualCheck.SetChecked(tx.ProviderManual)
+
+	formItems := []fyne.CanvasObject{
+		widget.NewLabel("Категорія:"),
+		categorySelect,
+		widget.NewSeparator(),
+		widget.NewLabel("Постачальник:"),
+		providerEntry,
+	}
+	if providerSuggestions != nil {
+		formItems = append(formItems, providerSuggestions)
+	}
+	formItems = append(formItems, providerSelectRow, manualCheck)
+	form := container.NewVBox(formItems...)
 
 	dialog.ShowCustomConfirm(
-		"Редагувати категорію",
+		"Редагувати транзакцію",
 		"Зберегти",
 		"Скасувати",
-		categorySelect,
+		form,
 		func(confirm bool) {
 			if !confirm {
 				return
 			}
-			tx.Category = selected
+			tx.Category = selectedCategory
+			switch v := providerEntry.(type) {
+			case *widgets.AutocompleteEntry:
+				tx.Provider = strings.TrimSpace(v.Text)
+			case *widget.Entry:
+				tx.Provider = strings.TrimSpace(v.Text)
+			}
+			tx.ProviderManual = manualCheck.Checked
 			if onSave != nil {
 				onSave()
 			}
 		},
 		win,
 	)
+}
+
+// buildProviderOptions формує відсортований список "ПІБ(код)" з довідника.
+func buildProviderOptions(state *AppState) []string {
+	opts := make([]string, 0, len(state.Config.Providers.Providers))
+	for code, name := range state.Config.Providers.Providers {
+		opts = append(opts, fmt.Sprintf("%s(%s)", name, code))
+	}
+	sort.Strings(opts)
+	return opts
 }

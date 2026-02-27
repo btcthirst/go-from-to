@@ -3,6 +3,8 @@ package ui
 import (
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 	"time"
 
 	"bank-analyzer/internal/models"
@@ -33,6 +35,8 @@ type reportOptions struct {
 func NewReportScreen(state *AppState) fyne.CanvasObject {
 	win := fyne.CurrentApp().Driver().AllWindows()[0]
 
+	// ─── Загальний звіт ──────────────────────────────────────────────────────
+
 	opts := reportOptions{
 		includeSummary:  true,
 		includeCategory: true,
@@ -40,11 +44,9 @@ func NewReportScreen(state *AppState) fyne.CanvasObject {
 		includeChart:    true,
 	}
 
-	// --- Формат ---
 	formatSelect := widget.NewSelect([]string{"XLSX", "ODS"}, nil)
 	formatSelect.SetSelected("XLSX")
 
-	// --- Шаблон ---
 	templateLabel := widget.NewLabel("не обрано")
 	templateLabel.Importance = widget.LowImportance
 
@@ -74,7 +76,6 @@ func NewReportScreen(state *AppState) fyne.CanvasObject {
 		templateLabel.Refresh()
 	})
 
-	// --- Фільтр дат ---
 	fromEntry := widget.NewEntry()
 	fromEntry.SetPlaceHolder("дд.мм.рррр")
 
@@ -115,7 +116,6 @@ func NewReportScreen(state *AppState) fyne.CanvasObject {
 		}),
 	)
 
-	// --- Секції звіту ---
 	includeSummary := widget.NewCheck("Підсумок", func(v bool) { opts.includeSummary = v })
 	includeCategory := widget.NewCheck("За категоріями", func(v bool) { opts.includeCategory = v })
 	includeMonthly := widget.NewCheck("По місяцях", func(v bool) { opts.includeMonthly = v })
@@ -126,7 +126,6 @@ func NewReportScreen(state *AppState) fyne.CanvasObject {
 	includeMonthly.SetChecked(true)
 	includeChart.SetChecked(true)
 
-	// --- Попередній перегляд ---
 	previewLabel := widget.NewRichTextFromMarkdown("")
 
 	refreshPreview := func() {
@@ -145,25 +144,22 @@ func NewReportScreen(state *AppState) fyne.CanvasObject {
 		))
 	}
 
-	fromEntry.OnChanged = func(s string) {
-		validateDate(fromEntry, &opts.from)
-		refreshPreview()
-	}
-	toEntry.OnChanged = func(s string) {
-		validateDate(toEntry, &opts.to)
-		refreshPreview()
-	}
-
+	fromEntry.OnChanged = func(s string) { validateDate(fromEntry, &opts.from); refreshPreview() }
+	toEntry.OnChanged = func(s string) { validateDate(toEntry, &opts.to); refreshPreview() }
 	refreshPreview()
 
-	// --- Прогрес ---
+	formatSelect.OnChanged = func(s string) {
+		opts.templatePath = ""
+		templateLabel.SetText("не обрано")
+		templateLabel.Importance = widget.LowImportance
+		templateLabel.Refresh()
+	}
+
 	progress := widget.NewProgressBarInfinite()
 	progress.Hide()
-
 	statusLabel := widget.NewLabel("")
 	statusLabel.Alignment = fyne.TextAlignCenter
 
-	// runInBackground виконує fn в горутині, блокує кнопки і показує прогрес.
 	runInBackground := func(buttons []*widget.Button, fn func() error, onDone func(err error)) {
 		for _, btn := range buttons {
 			btn.Disable()
@@ -184,7 +180,6 @@ func NewReportScreen(state *AppState) fyne.CanvasObject {
 		}()
 	}
 
-	// --- Кнопка повного звіту ---
 	var generateBtn *widget.Button
 	var exportDTOBtn *widget.Button
 
@@ -193,7 +188,6 @@ func NewReportScreen(state *AppState) fyne.CanvasObject {
 			dialog.ShowInformation("Немає даних", "Спочатку імпортуйте банківські виписки.", win)
 			return
 		}
-
 		d := dialog.NewFileSave(func(writer fyne.URIWriteCloser, err error) {
 			if err != nil {
 				dialog.ShowError(err, win)
@@ -204,9 +198,7 @@ func NewReportScreen(state *AppState) fyne.CanvasObject {
 			}
 			outputPath := writer.URI().Path()
 			writer.Close()
-
 			report := buildReport(state, opts)
-
 			runInBackground(
 				[]*widget.Button{generateBtn, exportDTOBtn},
 				func() error {
@@ -223,26 +215,20 @@ func NewReportScreen(state *AppState) fyne.CanvasObject {
 				},
 			)
 		}, win)
-
 		d.SetFileName(defaultFileName(formatSelect.Selected))
 		d.SetFilter(newFormatFilter(formatSelect.Selected))
 		d.Show()
 	})
 	generateBtn.Importance = widget.HighImportance
 
-	// --- Кнопка експорту через DTO ---
 	exportDTOBtn = widget.NewButtonWithIcon("Експорт (DTO)", theme.DownloadIcon(), func() {
 		txs := state.GetTransactions()
 		if len(txs) == 0 {
 			dialog.ShowInformation("Немає даних", "Спочатку імпортуйте банківські виписки.", win)
 			return
 		}
-
-		// Конвертуємо у DTO до відкриття діалогу збереження —
-		// щоб не тримати посилання на стан під час асинхронної операції.
 		filtered := filterByDate(txs, opts.from, opts.to)
 		dtos := models.ToTransactions(filtered)
-
 		d := dialog.NewFileSave(func(writer fyne.URIWriteCloser, err error) {
 			if err != nil {
 				dialog.ShowError(err, win)
@@ -253,7 +239,6 @@ func NewReportScreen(state *AppState) fyne.CanvasObject {
 			}
 			outputPath := writer.URI().Path()
 			writer.Close()
-
 			selectedFormat := formatSelect.Selected
 			runInBackground(
 				[]*widget.Button{generateBtn, exportDTOBtn},
@@ -272,7 +257,6 @@ func NewReportScreen(state *AppState) fyne.CanvasObject {
 				},
 			)
 		}, win)
-
 		ext := "xlsx"
 		if formatSelect.Selected == "ODS" {
 			ext = "ods"
@@ -283,14 +267,10 @@ func NewReportScreen(state *AppState) fyne.CanvasObject {
 	})
 	exportDTOBtn.Importance = widget.MediumImportance
 
-	formatSelect.OnChanged = func(s string) {
-		opts.templatePath = ""
-		templateLabel.SetText("не обрано")
-		templateLabel.Importance = widget.LowImportance
-		templateLabel.Refresh()
-	}
+	dtoHint := widget.NewLabel("Експорт (DTO) — спрощений формат: ID, дата, тип, сума, валюта, контрагент, категорія.")
+	dtoHint.Importance = widget.LowImportance
+	dtoHint.Wrapping = fyne.TextWrapWord
 
-	// --- Layout ---
 	settingsCard := widget.NewCard("Налаштування", "", container.NewVBox(
 		container.NewGridWithColumns(2,
 			widget.NewLabel("Формат:"),
@@ -311,34 +291,208 @@ func NewReportScreen(state *AppState) fyne.CanvasObject {
 	))
 
 	sectionsCard := widget.NewCard("Секції звіту", "", container.NewGridWithColumns(2,
-		includeSummary,
-		includeCategory,
-		includeMonthly,
-		includeChart,
+		includeSummary, includeCategory, includeMonthly, includeChart,
 	))
 
 	previewCard := widget.NewCard("Попередній перегляд", "", previewLabel)
 
-	// Пояснення різниці між кнопками
-	dtoHint := widget.NewLabel("Експорт (DTO) — спрощений формат: ID, дата, тип, сума, валюта, контрагент, категорія.")
-	dtoHint.Importance = widget.LowImportance
-	dtoHint.Wrapping = fyne.TextWrapWord
+	generalBottom := container.NewVBox(
+		container.NewGridWithColumns(2, generateBtn, exportDTOBtn),
+		dtoHint,
+	)
+
+	generalSection := container.NewVBox(settingsCard, sectionsCard, previewCard, generalBottom)
+
+	// ─── Звіт 311 ────────────────────────────────────────────────────────────
+
+	report311Section := newReport311Section(state, win, runInBackground)
+
+	// ─── Tabs ─────────────────────────────────────────────────────────────────
+
+	tabs := container.NewAppTabs(
+		container.NewTabItem("Загальний звіт", container.NewVScroll(generalSection)),
+		container.NewTabItem("Журнал-ордер 311", container.NewVScroll(report311Section)),
+	)
+	tabs.SetTabLocation(container.TabLocationTop)
 
 	bottom := container.NewVBox(
 		widget.NewSeparator(),
 		progress,
 		statusLabel,
-		container.NewGridWithColumns(2, generateBtn, exportDTOBtn),
-		dtoHint,
 	)
 
-	content := container.NewVScroll(container.NewVBox(
-		settingsCard,
-		sectionsCard,
-		previewCard,
+	return container.NewBorder(nil, bottom, nil, nil, tabs)
+}
+
+// newReport311Section будує UI-секцію для звіту "Журнал-ордер 311".
+func newReport311Section(
+	state *AppState,
+	win fyne.Window,
+	runInBackground func([]*widget.Button, func() error, func(error)),
+) fyne.CanvasObject {
+
+	// --- Вибір місяця ---
+	now := time.Now()
+
+	monthEntry := widget.NewEntry()
+	monthEntry.SetText(now.Format("01.2006"))
+	monthEntry.SetPlaceHolder("мм.рррр")
+
+	var selectedMonth time.Time
+	parseMonth := func() (time.Time, error) {
+		return time.Parse("01.2006", monthEntry.Text)
+	}
+
+	// Кнопки швидкого вибору місяця
+	prevMonthBtn := widget.NewButton("← Попередній", func() {
+		t, err := parseMonth()
+		if err != nil {
+			t = now
+		}
+		monthEntry.SetText(t.AddDate(0, -1, 0).Format("01.2006"))
+	})
+	curMonthBtn := widget.NewButton("Поточний", func() {
+		monthEntry.SetText(now.Format("01.2006"))
+	})
+	nextMonthBtn := widget.NewButton("Наступний →", func() {
+		t, err := parseMonth()
+		if err != nil {
+			t = now
+		}
+		monthEntry.SetText(t.AddDate(0, 1, 0).Format("01.2006"))
+	})
+
+	// --- Попередній перегляд ---
+	previewLabel := widget.NewLabel("")
+	previewLabel.Importance = widget.LowImportance
+
+	refreshPreview311 := func() {
+		t, err := parseMonth()
+		if err != nil {
+			previewLabel.SetText("Невірний формат місяця (мм.рррр)")
+			return
+		}
+		selectedMonth = t
+
+		all := state.GetTransactions()
+		txs := filterByMonth(all, selectedMonth)
+
+		if len(txs) == 0 {
+			if len(all) == 0 {
+				previewLabel.SetText("Транзакції не імпортовані")
+			} else {
+				previewLabel.SetText(fmt.Sprintf(
+					"Транзакцій за %s не знайдено.\nДоступні місяці: %s",
+					selectedMonth.Format("01.2006"),
+					uniqueMonths(all),
+				))
+			}
+			return
+		}
+		income, expense := calcTotals(txs)
+		previewLabel.SetText(fmt.Sprintf(
+			"Транзакцій: %d   Надходження: %s грн   Витрати: %s грн",
+			len(txs), income.StringFixed(2), expense.StringFixed(2),
+		))
+	}
+
+	monthEntry.OnChanged = func(_ string) { refreshPreview311() }
+	refreshPreview311()
+
+	// Оновлюємо preview коли з'являються нові транзакції
+	prevOnChanged := state.OnTransactionsChanged
+	state.OnTransactionsChanged = func() {
+		if prevOnChanged != nil {
+			prevOnChanged()
+		}
+		refreshPreview311()
+	}
+
+	// --- Кнопка генерації ---
+	var generate311Btn *widget.Button
+
+	generate311Btn = widget.NewButtonWithIcon("Згенерувати Журнал-ордер 311", theme.DocumentSaveIcon(), func() {
+		t, err := parseMonth()
+		if err != nil {
+			dialog.ShowError(errors.New("невірний формат місяця, очікується мм.рррр"), win)
+			return
+		}
+		selectedMonth = t
+
+		txs := filterByMonth(state.GetTransactions(), selectedMonth)
+		if len(txs) == 0 {
+			dialog.ShowInformation("Немає даних",
+				fmt.Sprintf("Транзакцій за %s не знайдено.", selectedMonth.Format("01.2006")), win)
+			return
+		}
+
+		d := dialog.NewFileSave(func(writer fyne.URIWriteCloser, saveErr error) {
+			if saveErr != nil {
+				dialog.ShowError(saveErr, win)
+				return
+			}
+			if writer == nil {
+				return
+			}
+			outputPath := writer.URI().Path()
+			writer.Close()
+
+			reporter := reports.NewXLSX311Reporter(state.Config.Report311)
+			snapshot := make([]*models.Transaction, len(txs))
+			copy(snapshot, txs)
+
+			runInBackground(
+				[]*widget.Button{generate311Btn},
+				func() error {
+					return reporter.Generate(snapshot, outputPath)
+				},
+				func(genErr error) {
+					if genErr != nil {
+						dialog.ShowError(genErr, win)
+						return
+					}
+					dialog.ShowInformation("Готово",
+						fmt.Sprintf("Журнал-ордер 311 за %s збережено.\nТранзакцій: %d",
+							selectedMonth.Format("січень 2006"), len(snapshot)), win)
+				},
+			)
+		}, win)
+
+		fileName := fmt.Sprintf("311_%s.xlsx", selectedMonth.Format("01_2006"))
+		d.SetFileName(fileName)
+		d.SetFilter(storage.NewExtensionFileFilter([]string{".xlsx"}))
+		d.Show()
+	})
+	generate311Btn.Importance = widget.HighImportance
+
+	// --- Інформація про конфігурацію ---
+	cfg := state.Config.Report311
+	mainCats := fmt.Sprintf("Основні категорії (Дт 311): %v", cfg.MainCategories)
+	subCols := ""
+	for _, sc := range cfg.SubColumns {
+		subCols += fmt.Sprintf("  рах.%s → %s\n", sc.Account, sc.Category)
+	}
+
+	configInfo := widget.NewLabel(mainCats + "\n\nРозбивка по рахунках:\n" + subCols)
+	configInfo.Importance = widget.LowImportance
+	configInfo.Wrapping = fyne.TextWrapWord
+
+	configCard := widget.NewCard("Конфігурація звіту", "з assets/report_311.yaml", configInfo)
+
+	monthCard := widget.NewCard("Період", "", container.NewVBox(
+		container.NewGridWithColumns(3, prevMonthBtn, curMonthBtn, nextMonthBtn),
+		container.NewGridWithColumns(2,
+			widget.NewLabel("Місяць (мм.рррр):"),
+			monthEntry,
+		),
+		previewLabel,
 	))
 
-	return container.NewBorder(nil, bottom, nil, nil, content)
+	return container.NewVBox(
+		monthCard,
+		configCard,
+		generate311Btn,
+	)
 }
 
 // --- Бізнес-логіка ---
@@ -451,6 +605,32 @@ func filterByDate(txs []*models.Transaction, from, to time.Time) []*models.Trans
 		result = append(result, tx)
 	}
 	return result
+}
+
+// filterByMonth повертає транзакції за конкретний місяць (рік + місяць).
+func filterByMonth(txs []*models.Transaction, month time.Time) []*models.Transaction {
+	result := make([]*models.Transaction, 0)
+	for _, tx := range txs {
+		if tx.Date.Year() == month.Year() && tx.Date.Month() == month.Month() {
+			result = append(result, tx)
+		}
+	}
+	return result
+}
+
+// uniqueMonths повертає відсортований рядок унікальних місяців з транзакцій.
+// Використовується для діагностики коли фільтр повертає порожній результат.
+func uniqueMonths(txs []*models.Transaction) string {
+	seen := make(map[string]struct{})
+	for _, tx := range txs {
+		seen[tx.Date.Format("01.2006")] = struct{}{}
+	}
+	months := make([]string, 0, len(seen))
+	for m := range seen {
+		months = append(months, m)
+	}
+	sort.Strings(months)
+	return strings.Join(months, ", ")
 }
 
 func calcTotals(txs []*models.Transaction) (income, expense decimal.Decimal) {
