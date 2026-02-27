@@ -211,6 +211,19 @@ func NewImportScreen(state *AppState) fyne.CanvasObject {
 		}
 	})
 
+	// ДОДАНО: Перехоплюємо подію скидання файлу у самого вікна.
+	win.SetOnDropped(func(pos fyne.Position, uris []fyne.URI) {
+		// Отримуємо абсолютні координати нашого віджета
+		dPos := fyne.CurrentApp().Driver().AbsolutePositionForObject(dropper)
+		dSize := dropper.Size()
+
+		// Перевіряємо, чи в момент Drop мишка знаходилася безпосередньо над нашим віджетом
+		if pos.X >= dPos.X && pos.X <= dPos.X+dSize.Width &&
+			pos.Y >= dPos.Y && pos.Y <= dPos.Y+dSize.Height {
+			dropper.DroppedFiles(uris) // Передаємо файли віджету
+		}
+	})
+
 	// --- Складання layout ---
 	toolbar := container.NewBorder(nil, nil, nil,
 		container.NewHBox(addBtn, clearBtn),
