@@ -48,6 +48,8 @@ func NewImportScreen(state *AppState) fyne.CanvasObject {
 	// --- Список файлів ---
 	fileList := widget.NewList(
 		func() int {
+			mu.RLock()
+			defer mu.RUnlock()
 			return len(files)
 		},
 		func() fyne.CanvasObject {
@@ -59,10 +61,14 @@ func NewImportScreen(state *AppState) fyne.CanvasObject {
 			return container.NewHBox(icon, container.NewVBox(name, status))
 		},
 		func(id widget.ListItemID, item fyne.CanvasObject) {
+			mu.RLock()
 			if id >= len(files) {
+				mu.RUnlock()
 				return
 			}
 			f := files[id]
+			mu.RUnlock()
+
 			box := item.(*fyne.Container)
 			inner := box.Objects[1].(*fyne.Container)
 

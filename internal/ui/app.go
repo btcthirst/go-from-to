@@ -25,9 +25,11 @@ type AppState struct {
 	Resolver     *categorizer.ProviderResolver
 	Config       *config.Config
 
-	// OnTransactionsChanged викликається після будь-якої зміни Transactions
-	// (імпорт, очищення). Екрани підписуються на цей колбек для оновлення.
-	OnTransactionsChanged func()
+	txListeners []func()
+}
+
+func (s *AppState) AddTransactionListener(fn func()) {
+	s.txListeners = append(s.txListeners, fn)
 }
 
 func (s *AppState) AppendTransactions(txs []*models.Transaction) {
@@ -50,8 +52,8 @@ func (s *AppState) ClearTransactions() {
 
 // NotifyTransactionsChanged безпечно викликає колбек, якщо він встановлений.
 func (s *AppState) NotifyTransactionsChanged() {
-	if s.OnTransactionsChanged != nil {
-		s.OnTransactionsChanged()
+	for _, fn := range s.txListeners {
+		fn()
 	}
 }
 

@@ -262,7 +262,7 @@ func NewCategoriesScreen(state *AppState) fyne.CanvasObject {
 // countTxInCategory повертає кількість транзакцій з даною категорією.
 func countTxInCategory(state *AppState, category string) int {
 	count := 0
-	for _, tx := range state.Transactions {
+	for _, tx := range state.GetTransactions() {
 		if tx.Category == category {
 			count++
 		}

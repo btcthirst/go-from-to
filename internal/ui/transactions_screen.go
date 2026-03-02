@@ -161,10 +161,10 @@ func NewTransactionsScreen(state *AppState) fyne.CanvasObject {
 		container.NewGridWithColumns(3, searchEntry, categorySelect, typeSelect),
 	)
 
-	state.OnTransactionsChanged = func() {
+	state.AddTransactionListener(func() {
 		refreshCache()
 		table.Refresh()
-	}
+	})
 
 	return container.NewBorder(filterBar, statusLabel, nil, nil, table)
 }
@@ -172,8 +172,9 @@ func NewTransactionsScreen(state *AppState) fyne.CanvasObject {
 // --- Фільтрація ---
 
 func filtered(state *AppState, search, category, txType string) []*models.Transaction {
-	result := make([]*models.Transaction, 0, len(state.Transactions))
-	for _, tx := range state.Transactions {
+	txs := state.GetTransactions()
+	result := make([]*models.Transaction, 0, len(txs))
+	for _, tx := range txs {
 		if search != "" &&
 			!containsIgnoreCase(tx.Description, search) &&
 			!containsIgnoreCase(tx.Counterparty, search) {

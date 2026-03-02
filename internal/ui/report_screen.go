@@ -400,13 +400,9 @@ func newReport311Section(
 	refreshPreview311()
 
 	// Оновлюємо preview коли з'являються нові транзакції
-	prevOnChanged := state.OnTransactionsChanged
-	state.OnTransactionsChanged = func() {
-		if prevOnChanged != nil {
-			prevOnChanged()
-		}
+	state.AddTransactionListener(func() {
 		refreshPreview311()
-	}
+	})
 
 	// --- Кнопка генерації ---
 	var generate311Btn *widget.Button
@@ -499,69 +495,10 @@ func newReport311Section(
 
 func buildReport(state *AppState, opts reportOptions) *models.Report {
 	txs := filterByDate(state.GetTransactions(), opts.from, opts.to)
-
-	report := &models.Report{
-		Transactions: txs,
-		ByCategory:   make(map[string]models.CategorySummary),
-		ByMonth:      make(map[string]models.MonthSummary),
-	}
-
-	if len(txs) == 0 {
-		return report
-	}
-
-	report.Period.From = txs[0].Date
-	report.Period.To = txs[0].Date
-
-	var totalExpense decimal.Decimal
-
-	for _, tx := range txs {
-		if tx.Date.Before(report.Period.From) {
-			report.Period.From = tx.Date
-		}
-		if tx.Date.After(report.Period.To) {
-			report.Period.To = tx.Date
-		}
-
-		if tx.Type == models.Credit {
-			report.TotalIncome = report.TotalIncome.Add(tx.Amount)
-		} else {
-			report.TotalExpense = report.TotalExpense.Add(tx.Amount)
-			totalExpense = totalExpense.Add(tx.Amount)
-		}
-
-		if opts.includeCategory {
-			cs := report.ByCategory[tx.Category]
-			cs.Category = tx.Category
-			cs.Count++
-			cs.Total = cs.Total.Add(tx.Amount)
-			report.ByCategory[tx.Category] = cs
-		}
-
-		if opts.includeMonthly {
-			key := tx.Date.Format("2006-01")
-			ms := report.ByMonth[key]
-			ms.Month = key
-			if tx.Type == models.Credit {
-				ms.Income = ms.Income.Add(tx.Amount)
-			} else {
-				ms.Expense = ms.Expense.Add(tx.Amount)
-			}
-			report.ByMonth[key] = ms
-		}
-	}
-
-	report.NetBalance = report.TotalIncome.Sub(report.TotalExpense)
-
-	if opts.includeCategory && !totalExpense.IsZero() {
-		for key, cs := range report.ByCategory {
-			f, _ := cs.Total.Div(totalExpense).Mul(decimal.NewFromInt(100)).Float64()
-			cs.Percent = f
-			report.ByCategory[key] = cs
-		}
-	}
-
-	return report
+	return reports.BuildReport(txs, reports.BuildOptions{
+		IncludeCategory: opts.includeCategory,
+		IncludeMonthly:  opts.includeMonthly,
+	})
 }
 
 func generateReport(format, templatePath string, report *models.Report, outputPath string) error {
