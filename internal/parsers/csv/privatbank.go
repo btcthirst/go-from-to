@@ -1,4 +1,4 @@
-// Package csv implements a parser for CSV bank statements, specifically tailored for ПриватБанк.
+// Package csv implements parsers for CSV bank statements.
 package csv
 
 import (
@@ -17,22 +17,21 @@ import (
 
 const privatbankCSVKey = "privatbank_csv"
 
+// PrivatBankParser parses PrivatBank CSV statements.
+// The CSV file uses Windows-1251 encoding and semicolon as delimiter.
 type PrivatBankParser struct {
 	mapping mappings.ParserMapping
 }
 
+// NewPrivatBankParser creates a parser using the provided column mappings.
+// Panics if the mapping key is not found — see MappingsConfig.MustGetParser.
 func NewPrivatBankParser(cfg mappings.MappingsConfig) *PrivatBankParser {
-	m, err := cfg.ForParser(privatbankCSVKey)
-	if err != nil {
-		log.Printf("[PrivatBankCSV] маппінг не знайдено, використовую порожній: %v", err)
-		m = mappings.ParserMapping{}
-	}
-	return &PrivatBankParser{mapping: m}
+	return &PrivatBankParser{mapping: cfg.MustGetParser(privatbankCSVKey)}
 }
 
 func (p *PrivatBankParser) Name() string { return "ПриватБанк CSV" }
 
-// requiredHeaders — мінімальний набір для ідентифікації формату.
+// requiredCSVHeaders is the minimum set of headers needed to identify the format.
 var requiredCSVHeaders = []string{"ЄДРПОУ", "МФО", "Рахунок", "Дата операції", "Сума"}
 
 func (p *PrivatBankParser) CanParse(filepath string) (bool, error) {
@@ -56,12 +55,12 @@ func (p *PrivatBankParser) CanParse(filepath string) (bool, error) {
 		return false, nil
 	}
 
-	log.Printf("[PrivatBankCSV] CanParse: заголовки = %v", header)
+	log.Printf("[PrivatBankCSV] CanParse: headers = %v", header)
 
 	normalized := normalizeHeaders(header)
 	for _, required := range requiredCSVHeaders {
 		if !normalized[strings.ToLower(strings.TrimSpace(required))] {
-			log.Printf("[PrivatBankCSV] CanParse: не знайдено заголовок %q", required)
+			log.Printf("[PrivatBankCSV] CanParse: header %q not found", required)
 			return false, nil
 		}
 	}
@@ -71,7 +70,7 @@ func (p *PrivatBankParser) CanParse(filepath string) (bool, error) {
 func (p *PrivatBankParser) Parse(filepath string) ([]*models.Transaction, error) {
 	f, err := os.Open(filepath)
 	if err != nil {
-		return nil, fmt.Errorf("не вдалося відкрити файл: %w", err)
+		return nil, fmt.Errorf("could not open file: %w", err)
 	}
 	defer f.Close()
 
@@ -82,14 +81,14 @@ func (p *PrivatBankParser) Parse(filepath string) ([]*models.Transaction, error)
 
 	records, err := reader.ReadAll()
 	if err != nil {
-		return nil, fmt.Errorf("помилка читання CSV: %w", err)
+		return nil, fmt.Errorf("CSV read error: %w", err)
 	}
 	if len(records) < 2 {
-		return nil, fmt.Errorf("файл порожній або містить лише заголовки")
+		return nil, fmt.Errorf("file is empty or contains only headers")
 	}
 
 	header := records[0]
-	log.Printf("[PrivatBankCSV] Parse: заголовки = %v", header)
+	log.Printf("[PrivatBankCSV] Parse: headers = %v", header)
 
 	idx := buildIndex(header)
 
@@ -102,14 +101,14 @@ func (p *PrivatBankParser) Parse(filepath string) ([]*models.Transaction, error)
 	edropuCol := utils.FirstMatch(idx, p.mapping.Get("edrpou"))
 	docNumCol := utils.FirstMatch(idx, p.mapping.Get("doc_num"))
 
-	log.Printf("[PrivatBankCSV] Parse: колонки: date=%d amount=%d currency=%d desc=%d counterparty=%d iban=%d",
+	log.Printf("[PrivatBankCSV] Parse: columns: date=%d amount=%d currency=%d desc=%d counterparty=%d iban=%d",
 		dateCol, amountCol, currencyCol, descCol, counterpartyCol, ibanCol)
 
 	if dateCol < 0 {
-		return nil, fmt.Errorf("не знайдено колонку дати")
+		return nil, fmt.Errorf("date column not found")
 	}
 	if amountCol < 0 {
-		return nil, fmt.Errorf("не знайдено колонку суми")
+		return nil, fmt.Errorf("amount column not found")
 	}
 
 	var txs []*models.Transaction
@@ -121,7 +120,7 @@ func (p *PrivatBankParser) Parse(filepath string) ([]*models.Transaction, error)
 		}
 		tx, err := parseCSVRow(row, rowNum+2, dateCol, amountCol, currencyCol, descCol, counterpartyCol, ibanCol, edropuCol, docNumCol)
 		if err != nil {
-			log.Printf("[PrivatBankCSV] пропущено рядок %d: %v", rowNum+2, err)
+			log.Printf("[PrivatBankCSV] skipping row %d: %v", rowNum+2, err)
 			skipped++
 			continue
 		}
@@ -129,10 +128,10 @@ func (p *PrivatBankParser) Parse(filepath string) ([]*models.Transaction, error)
 		txs = append(txs, tx)
 	}
 
-	log.Printf("[PrivatBankCSV] Parse: імпортовано=%d, пропущено=%d", len(txs), skipped)
+	log.Printf("[PrivatBankCSV] Parse: imported=%d, skipped=%d", len(txs), skipped)
 
 	if len(txs) == 0 {
-		return nil, fmt.Errorf("не знайдено жодної транзакції (пропущено: %d)", skipped)
+		return nil, fmt.Errorf("no transactions found (skipped: %d)", skipped)
 	}
 	return txs, nil
 }
@@ -141,16 +140,16 @@ func parseCSVRow(row []string, rowNum, dateCol, amountCol, currencyCol, descCol,
 	dateRaw := utils.SafeGet(row, dateCol)
 	date, err := utils.ParseDate(dateRaw)
 	if err != nil {
-		return nil, fmt.Errorf("рядок %d: дата %q: %w", rowNum, dateRaw, err)
+		return nil, fmt.Errorf("row %d: date %q: %w", rowNum, dateRaw, err)
 	}
 
 	amountRaw := utils.SafeGet(row, amountCol)
 	amt, err := utils.ParseDecimal(amountRaw)
 	if err != nil {
-		return nil, fmt.Errorf("рядок %d: сума %q: %w", rowNum, amountRaw, err)
+		return nil, fmt.Errorf("row %d: amount %q: %w", rowNum, amountRaw, err)
 	}
 	if amt.IsZero() {
-		return nil, fmt.Errorf("рядок %d: сума нульова", rowNum)
+		return nil, fmt.Errorf("row %d: amount is zero", rowNum)
 	}
 
 	txType := models.Credit
@@ -184,7 +183,7 @@ func parseCSVRow(row []string, rowNum, dateCol, amountCol, currencyCol, descCol,
 	}, nil
 }
 
-// --- Спільні допоміжні функції для CSV пакету ---
+// --- Shared CSV helpers ---
 
 func normalizeHeaders(header []string) map[string]bool {
 	m := make(map[string]bool, len(header))

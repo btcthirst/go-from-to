@@ -1,4 +1,4 @@
-// Package xlsx implements a parser for XLSX bank statements, specifically tailored for ПриватБанк.
+// Package xlsx implements parsers for XLSX bank statements.
 package xlsx
 
 import (
@@ -16,22 +16,21 @@ import (
 
 const privatbankXLSXKey = "privatbank_xlsx"
 
+// PrivatBankXLSXParser parses PrivatBank XLSX statements.
 type PrivatBankXLSXParser struct {
 	mapping mappings.ParserMapping
 }
 
+// NewPrivatBankXLSXParser creates a parser using the provided column mappings.
+// Panics if the mapping key is not found — see MappingsConfig.MustGetParser.
 func NewPrivatBankXLSXParser(cfg mappings.MappingsConfig) *PrivatBankXLSXParser {
-	m, err := cfg.ForParser(privatbankXLSXKey)
-	if err != nil {
-		log.Printf("[PrivatBankXLSX] маппінг не знайдено, використовую порожній: %v", err)
-		m = mappings.ParserMapping{}
-	}
-	return &PrivatBankXLSXParser{mapping: m}
+	return &PrivatBankXLSXParser{mapping: cfg.MustGetParser(privatbankXLSXKey)}
 }
 
 func (p *PrivatBankXLSXParser) Name() string { return "ПриватБанк XLSX" }
 
-// requiredXLSXHeaders — набори заголовків для ідентифікації формату.
+// requiredXLSXHeaders contains sets of headers used to identify the format.
+// Any one matching set is sufficient.
 var requiredXLSXHeaders = [][]string{
 	{"Дата проводки", "Сума", "Призначення платежу"},
 	{"Дата проводки", "Сума в валюті рахунку", "Призначення платежу"},
@@ -59,14 +58,13 @@ func (p *PrivatBankXLSXParser) CanParse(filepath string) (bool, error) {
 	}
 
 	_, found := findHeaderRow(rows)
-	//log.Printf("[PrivatBankXLSX] CanParse: headerIdx=%d, found=%v", headerIdx, found)
 	return found, nil
 }
 
 func (p *PrivatBankXLSXParser) Parse(filepath string) ([]*models.Transaction, error) {
 	f, err := excelize.OpenFile(filepath)
 	if err != nil {
-		return nil, fmt.Errorf("не вдалося відкрити файл: %w", err)
+		return nil, fmt.Errorf("could not open file: %w", err)
 	}
 	defer f.Close()
 
@@ -76,17 +74,15 @@ func (p *PrivatBankXLSXParser) Parse(filepath string) ([]*models.Transaction, er
 	}
 	rows, err := f.GetRows(sheet)
 	if err != nil {
-		return nil, fmt.Errorf("не вдалося прочитати рядки: %w", err)
+		return nil, fmt.Errorf("could not read rows: %w", err)
 	}
 
 	headerIdx, found := findHeaderRow(rows)
 	if !found {
-		return nil, fmt.Errorf("не знайдено рядок заголовків")
+		return nil, fmt.Errorf("header row not found")
 	}
 
 	header := rows[headerIdx]
-	//log.Printf("[PrivatBankXLSX] Parse: заголовки = %v", header)
-
 	idx := buildXLSXIndex(header)
 
 	dateCol := utils.FirstMatch(idx, p.mapping.Get("date"))
@@ -99,11 +95,8 @@ func (p *PrivatBankXLSXParser) Parse(filepath string) ([]*models.Transaction, er
 	debitCol := utils.FirstMatch(idx, p.mapping.Get("debit"))
 	creditCol := utils.FirstMatch(idx, p.mapping.Get("credit"))
 
-	/*log.Printf("[PrivatBankXLSX] Parse: колонки: date=%d amount=%d desc=%d currency=%d counterparty=%d iban=%d balance=%d debit=%d credit=%d",
-	dateCol, amountCol, descCol, currencyCol, counterpartyCol, ibanCol, balanceCol, debitCol, creditCol)*/
-
 	if dateCol < 0 {
-		return nil, fmt.Errorf("не знайдено колонку дати")
+		return nil, fmt.Errorf("date column not found")
 	}
 
 	var txs []*models.Transaction
@@ -114,14 +107,13 @@ func (p *PrivatBankXLSXParser) Parse(filepath string) ([]*models.Transaction, er
 			continue
 		}
 		if isSummaryRow(row) {
-			log.Printf("[PrivatBankXLSX] зупинка на підсумковому рядку %d", rowNum+headerIdx+2)
+			log.Printf("[PrivatBankXLSX] stopping at summary row %d", rowNum+headerIdx+2)
 			break
 		}
 
 		tx, err := parseXLSXRow(row, rowNum+headerIdx+2, dateCol, amountCol, debitCol, creditCol, currencyCol, descCol, counterpartyCol, ibanCol, balanceCol)
-
 		if err != nil {
-			log.Printf("[PrivatBankXLSX] пропущено рядок %d: %v | %v", rowNum+headerIdx+2, err, row)
+			log.Printf("[PrivatBankXLSX] skipping row %d: %v | %v", rowNum+headerIdx+2, err, row)
 			skipped++
 			continue
 		}
@@ -130,17 +122,17 @@ func (p *PrivatBankXLSXParser) Parse(filepath string) ([]*models.Transaction, er
 	}
 
 	if len(txs) == 0 {
-		return nil, fmt.Errorf("не знайдено жодної транзакції (пропущено: %d)", skipped)
+		return nil, fmt.Errorf("no transactions found (skipped: %d)", skipped)
 	}
 	return txs, nil
 }
 
-// --- Допоміжні функції ---
+// --- Helpers ---
 
 func firstSheet(f *excelize.File) (string, error) {
 	sheets := f.GetSheetList()
 	if len(sheets) == 0 {
-		return "", fmt.Errorf("файл не містить аркушів")
+		return "", fmt.Errorf("file contains no sheets")
 	}
 	return sheets[0], nil
 }
@@ -212,7 +204,7 @@ func parseXLSXRow(row []string, rowNum, dateCol, amountCol, debitCol, creditCol,
 	dateRaw := utils.SafeGet(row, dateCol)
 	date, err := utils.ParseDate(dateRaw)
 	if err != nil {
-		return nil, fmt.Errorf("дата %q: %w", dateRaw, err)
+		return nil, fmt.Errorf("date %q: %w", dateRaw, err)
 	}
 
 	var amount decimal.Decimal
@@ -226,12 +218,12 @@ func parseXLSXRow(row []string, rowNum, dateCol, amountCol, debitCol, creditCol,
 		} else if !debit.IsZero() {
 			amount, txType = debit, models.Debit
 		} else {
-			return nil, fmt.Errorf("рядок %d: дебет і кредит нульові", rowNum)
+			return nil, fmt.Errorf("row %d: both debit and credit are zero", rowNum)
 		}
 	} else if amountCol >= 0 {
 		amt, err := utils.ParseDecimal(utils.SafeGet(row, amountCol))
 		if err != nil {
-			return nil, fmt.Errorf("сума: %w", err)
+			return nil, fmt.Errorf("amount: %w", err)
 		}
 		if amt.IsNegative() {
 			amount, txType = amt.Abs(), models.Debit
@@ -239,7 +231,7 @@ func parseXLSXRow(row []string, rowNum, dateCol, amountCol, debitCol, creditCol,
 			amount, txType = amt, models.Credit
 		}
 	} else {
-		return nil, fmt.Errorf("рядок %d: не знайдено колонку суми", rowNum)
+		return nil, fmt.Errorf("row %d: amount column not found", rowNum)
 	}
 
 	currency := utils.SafeGet(row, currencyCol)
