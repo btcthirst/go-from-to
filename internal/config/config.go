@@ -1,7 +1,10 @@
 // Package config provides configuration management for the application.
 package config
 
-import "bank-analyzer/internal/mappings"
+import (
+	"bank-analyzer/internal/mappings"
+	"log"
+)
 
 // Config зберігає налаштування застосунку та категорії транзакцій.
 type Config struct {
@@ -14,6 +17,7 @@ type Config struct {
 	Categories    mappings.CategoriesConfig
 	Report311     mappings.Report311Config
 	Providers     mappings.ProvidersConfig
+	Warnings      []string // warnings collected during configuration loading
 }
 
 func (c *Config) GetTheme() string { return c.theme }
@@ -26,7 +30,7 @@ func Load() *Config {
 		providersPath  = "assets/providers.yaml"
 	)
 
-	return &Config{
+	cfg := &Config{
 		theme:         "system",
 		ConfigPath:    categoriesPath,
 		MappingsPath:  mappingsPath,
@@ -37,4 +41,15 @@ func Load() *Config {
 		Report311:     mappings.LoadReport311Config(report311Path),
 		Providers:     mappings.LoadProvidersConfig(providersPath),
 	}
+
+	cfg.Warnings = mappings.ValidateReport311Config(cfg.Report311, cfg.Categories)
+
+	// Validation: categories in report 311 must exist in categories.yaml
+	if warnings := mappings.ValidateReport311Config(cfg.Report311, cfg.Categories); len(warnings) > 0 {
+		for _, w := range warnings {
+			log.Printf("[config] warn: %s", w)
+		}
+	}
+
+	return cfg
 }

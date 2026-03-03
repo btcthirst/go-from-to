@@ -1,6 +1,7 @@
 package mappings
 
 import (
+	"fmt"
 	"log"
 	"os"
 
@@ -53,4 +54,31 @@ func mustParseReport311Config(data []byte) Report311Config {
 		panic("вбудований report_311.yaml пошкоджений: " + err.Error())
 	}
 	return cfg
+}
+
+// ValidateReport311Config перевіряє що всі категорії зі звіту 311
+// присутні у конфігурації категорій.
+// Повертає список попереджень — порожній якщо все коректно.
+func ValidateReport311Config(cfg Report311Config, cats CategoriesConfig) []string {
+	var warnings []string
+
+	for _, sc := range cfg.SubColumns {
+		if _, ok := cats[sc.Category]; !ok {
+			warnings = append(warnings,
+				fmt.Sprintf("report_311: категорія %q (рах. %s) не знайдена у categories.yaml",
+					sc.Category, sc.Account),
+			)
+		}
+	}
+
+	for _, mc := range cfg.MainCategories {
+		if _, ok := cats[mc]; !ok {
+			warnings = append(warnings,
+				fmt.Sprintf("report_311: основна категорія %q не знайдена у categories.yaml",
+					mc),
+			)
+		}
+	}
+
+	return warnings
 }

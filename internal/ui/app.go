@@ -146,12 +146,45 @@ func Run() {
 
 	w.SetContent(split)
 
-	// Показуємо повідомлення про відсутній providers.yaml після старту вікна.
-	if !cfg.Providers.Loaded {
-		go showProvidersWarning(w, cfg.ProvidersPath)
+	// No point showing warnings if there's nothing to warn about
+	if !cfg.Providers.Loaded || len(cfg.Warnings) > 0 {
+		go showStartupWarnings(w, cfg)
 	}
 
 	w.ShowAndRun()
+}
+
+func showStartupWarnings(w fyne.Window, cfg *config.Config) {
+	// Чекаємо поки вікно стане видимим
+	for w.Canvas().Size().IsZero() {
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	fyne.Do(func() {
+		if !cfg.Providers.Loaded {
+			msg := fmt.Sprintf(
+				"Файл довідника постачальників не знайдено.\n\n"+
+					"Без нього категорія «Внески» не матиме розбивки\n"+
+					"по постачальниках у звіті «Журнал-ордер 311».\n\n"+
+					"Створіть файл %s з вмістом:\n\n"+
+					"  providers:\n"+
+					"    \"12345\": \"Іваненко І.І\"\n"+
+					"    \"67890\": \"Петренко П.П\"\n\n"+
+					"де ключ — код що міститься в описі транзакції.",
+				cfg.ProvidersPath,
+			)
+			dialog.ShowInformation("Довідник постачальників", msg, w)
+		}
+
+		if len(cfg.Warnings) > 0 {
+			msg := "Виявлено проблеми у конфігурації:\n\n"
+			for _, warn := range cfg.Warnings {
+				msg += "• " + warn + "\n"
+			}
+			msg += "\nПеревірте файли assets/report_311.yaml та assets/categories.yaml."
+			dialog.ShowError(fmt.Errorf("%s", msg), w)
+		}
+	})
 }
 
 // showProvidersWarning показує діалог з інструкцією щодо створення providers.yaml.
