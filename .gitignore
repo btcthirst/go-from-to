@@ -32,4 +32,6 @@ go.work.sum
 .vscode/
 bin/
 workdir/
+# Довідник постачальників — містить персональні дані (ПІБ, коди ЄДРПОУ).
+# Формат: див. internal/mappings/providers_config.go
 providers.yaml

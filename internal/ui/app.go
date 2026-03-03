@@ -2,7 +2,9 @@
 package ui
 
 import (
+	"fmt"
 	"sync"
+	"time"
 
 	"bank-analyzer/internal/categorizer"
 	"bank-analyzer/internal/config"
@@ -12,6 +14,7 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
@@ -50,7 +53,7 @@ func (s *AppState) ClearTransactions() {
 	s.Transactions = []*models.Transaction{}
 }
 
-// NotifyTransactionsChanged безпечно викликає колбек, якщо він встановлений.
+// NotifyTransactionsChanged викликає всіх підписників.
 func (s *AppState) NotifyTransactionsChanged() {
 	for _, fn := range s.txListeners {
 		fn()
@@ -79,7 +82,6 @@ func Run() {
 	w.SetMaster()
 
 	// --- Екрани ---
-	// NewTransactionsScreen сам підписується на state.OnTransactionsChanged.
 	screens := []fyne.CanvasObject{
 		NewImportScreen(state),
 		NewTransactionsScreen(state),
@@ -134,7 +136,6 @@ func Run() {
 	}
 	navPanel.Add(widget.NewSeparator())
 
-	// Версія / назва внизу панелі навігації
 	appLabel := widget.NewLabelWithStyle("Bank Analyzer", fyne.TextAlignCenter, fyne.TextStyle{Italic: true})
 	appLabel.Importance = widget.LowImportance
 
@@ -144,5 +145,35 @@ func Run() {
 	split.SetOffset(0.18)
 
 	w.SetContent(split)
+
+	// Показуємо повідомлення про відсутній providers.yaml після старту вікна.
+	if !cfg.Providers.Loaded {
+		go showProvidersWarning(w, cfg.ProvidersPath)
+	}
+
 	w.ShowAndRun()
+}
+
+// showProvidersWarning показує діалог з інструкцією щодо створення providers.yaml.
+// Викликається в горутині — чекає поки вікно стане видимим перед показом діалогу.
+func showProvidersWarning(w fyne.Window, path string) {
+	// Чекаємо поки вікно стане видимим
+	for w.Canvas().Size().IsZero() {
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	fyne.Do(func() {
+		msg := fmt.Sprintf(
+			"Файл довідника постачальників не знайдено.\n\n"+
+				"Без нього категорія «Внески» не матиме розбивки\n"+
+				"по постачальниках у звіті «Журнал-ордер 311».\n\n"+
+				"Створіть файл %s з вмістом:\n\n"+
+				"  providers:\n"+
+				"    \"12345\": \"Іваненко І.І\"\n"+
+				"    \"67890\": \"Петренко П.П\"\n\n"+
+				"де ключ — особистий рахунок.",
+			path,
+		)
+		dialog.ShowInformation("Довідник постачальників", msg, w)
+	})
 }

@@ -141,7 +141,6 @@ func NewImportScreen(state *AppState) fyne.CanvasObject {
 		// Оновлення стану і UI — тільки в головному потоці
 		fyne.Do(func() {
 			mu.Lock()
-			defer mu.Unlock()
 			// Знайти і оновити pending-запис
 			for i := range files {
 				if files[i].path == path && files[i].bankName == "завантаження..." {
@@ -156,7 +155,7 @@ func NewImportScreen(state *AppState) fyne.CanvasObject {
 					break
 				}
 			}
-
+			mu.Unlock()
 			fileList.Refresh()
 			refreshSummary()
 			state.NotifyTransactionsChanged()

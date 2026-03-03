@@ -310,8 +310,8 @@ func NewReportScreen(state *AppState) fyne.CanvasObject {
 	// ─── Tabs ─────────────────────────────────────────────────────────────────
 
 	tabs := container.NewAppTabs(
-		container.NewTabItem("Загальний звіт", container.NewVScroll(generalSection)),
 		container.NewTabItem("Журнал-ордер 311", container.NewVScroll(report311Section)),
+		container.NewTabItem("Загальний звіт", container.NewVScroll(generalSection)),
 	)
 	tabs.SetTabLocation(container.TabLocationTop)
 
