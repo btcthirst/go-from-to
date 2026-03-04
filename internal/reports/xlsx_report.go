@@ -276,13 +276,14 @@ func (r *XLSXReporter) writeTransactions(f *excelize.File, transactions []*model
 	})
 	f.SetRowStyle(sheet, 1, 1, headerStyle)
 
+	customFmt := `#,##0.00`
 	incomeStyle, _ := f.NewStyle(&excelize.Style{
-		Fill:   excelize.Fill{Type: "pattern", Color: []string{colorIncome}, Pattern: 1},
-		NumFmt: 177,
+		Fill:         excelize.Fill{Type: "pattern", Color: []string{colorIncome}, Pattern: 1},
+		CustomNumFmt: &customFmt,
 	})
 	expenseStyle, _ := f.NewStyle(&excelize.Style{
-		Fill:   excelize.Fill{Type: "pattern", Color: []string{colorExpense}, Pattern: 1},
-		NumFmt: 177,
+		Fill:         excelize.Fill{Type: "pattern", Color: []string{colorExpense}, Pattern: 1},
+		CustomNumFmt: &customFmt,
 	})
 
 	for i, tx := range transactions {

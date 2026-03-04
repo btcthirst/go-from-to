@@ -14,6 +14,8 @@ const (
 	Credit
 )
 
+const UncategorizedCategory = "Uncategorized"
+
 type Transaction struct {
 	ID           string
 	Date         time.Time

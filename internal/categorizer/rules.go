@@ -81,14 +81,14 @@ func (c *RulesCategorizer) Categorize(tx *models.Transaction) string {
 		}
 	}
 
-	return "Uncategorized"
+	return models.UncategorizedCategory
 }
 
 // CategorizeAll категоризує всі транзакції у списку.
 // Пропускає транзакції що вже мають категорію.
 func (c *RulesCategorizer) CategorizeAll(txs []*models.Transaction) {
 	for _, tx := range txs {
-		if tx.Category == "" {
+		if tx.Category == "" || tx.Category == models.UncategorizedCategory {
 			tx.Category = c.Categorize(tx)
 		}
 	}
@@ -115,7 +115,7 @@ func (c *RulesCategorizer) AddRule(category, keyword, txType string) {
 	}
 
 	rule := c.categories[category]
-	rule.Keywords = append(rule.Keywords, keyword)
+	rule.Keywords = append(rule.Keywords, kw)
 	if rule.Type == "" && txType != "" {
 		rule.Type = txType
 	}

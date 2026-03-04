@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bank-analyzer/internal/models"
 	"fmt"
 	"strings"
 
@@ -210,7 +211,7 @@ func NewCategoriesScreen(state *AppState) fyne.CanvasObject {
 				// Переводимо транзакції у Uncategorized
 				for _, tx := range state.Transactions {
 					if tx.Category == selectedCategory {
-						tx.Category = "Uncategorized"
+						tx.Category = models.UncategorizedCategory
 					}
 				}
 				state.Config.RemoveCategory(selectedCategory)

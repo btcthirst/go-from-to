@@ -65,7 +65,7 @@ func Run() {
 	registry := parsers.NewRegistry(cfg.Mappings)
 
 	cat := categorizer.NewRulesCategorizer(cfg.Categories)
-	resolv := categorizer.NewProviderResolver(cfg.Providers)
+	resolv := categorizer.NewProviderResolver(cfg.Providers, cfg.Categories)
 
 	state := &AppState{
 		mu:           sync.RWMutex{},

@@ -12,6 +12,7 @@ import (
 // CategoryRule — правило категоризації для однієї категорії.
 type CategoryRule struct {
 	Type     string   `yaml:"type"`
+	Provider string   `yaml:"provider"`
 	Keywords []string `yaml:"keywords"`
 }
 
