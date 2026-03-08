@@ -505,9 +505,9 @@ func generateReport(format, templatePath string, report *models.Report, outputPa
 	case "XLSX":
 		r := &reports.XLSXReporter{TemplatePath: templatePath}
 		return r.Generate(report, outputPath)
-	case "ODS":
-		r := &reports.ODSReporter{}
-		return r.Generate(report, outputPath)
+	case "CSV":
+		// тут буде код для csv report
+		return nil
 	default:
 		return fmt.Errorf("невідомий формат: %s", format)
 	}
@@ -518,9 +518,9 @@ func generateReportDTO(format, templatePath string, dtos []models.TransactionDTO
 	case "XLSX":
 		r := &reports.XLSXReporter{TemplatePath: templatePath}
 		return r.GenerateFromDTO(dtos, outputPath)
-	case "ODS":
-		r := &reports.ODSReporter{}
-		return r.GenerateFromDTO(dtos, outputPath)
+	case "CSV":
+		// тут буде код для csv report
+		return nil
 	default:
 		return fmt.Errorf("невідомий формат: %s", format)
 	}
