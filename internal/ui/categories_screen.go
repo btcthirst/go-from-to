@@ -13,8 +13,7 @@ import (
 )
 
 // NewCategoriesScreen повертає екран управління категоріями та ключовими словами.
-func NewCategoriesScreen(state *AppState) fyne.CanvasObject {
-	win := fyne.CurrentApp().Driver().AllWindows()[0]
+func NewCategoriesScreen(state *AppState, win fyne.Window) fyne.CanvasObject {
 
 	// --- Стан екрану ---
 	categories := state.Config.CategoryNames()
@@ -208,12 +207,9 @@ func NewCategoriesScreen(state *AppState) fyne.CanvasObject {
 				if !ok {
 					return
 				}
-				// Переводимо транзакції у Uncategorized
-				for _, tx := range state.Transactions {
-					if tx.Category == selectedCategory {
-						tx.Category = models.UncategorizedCategory
-					}
-				}
+				// Переводимо транзакції у Uncategorized через захищений метод.
+				// Прямий доступ до state.Transactions без mutex видалено (race condition).
+				state.RecategorizeTo(selectedCategory, models.UncategorizedCategory)
 				state.Config.RemoveCategory(selectedCategory)
 				categories = state.Config.CategoryNames()
 				selectedCategory = ""

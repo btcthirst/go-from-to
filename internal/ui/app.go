@@ -53,6 +53,18 @@ func (s *AppState) ClearTransactions() {
 	s.Transactions = []*models.Transaction{}
 }
 
+// RecategorizeTo переводить усі транзакції з категорії from у категорію to.
+// Захищений мьютексом — безпечно викликати поки в горутинах йде імпорт.
+func (s *AppState) RecategorizeTo(from, to string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, tx := range s.Transactions {
+		if tx.Category == from {
+			tx.Category = to
+		}
+	}
+}
+
 // NotifyTransactionsChanged викликає всіх підписників.
 func (s *AppState) NotifyTransactionsChanged() {
 	for _, fn := range s.txListeners {
@@ -83,10 +95,10 @@ func Run() {
 
 	// --- Екрани ---
 	screens := []fyne.CanvasObject{
-		NewImportScreen(state),
-		NewTransactionsScreen(state),
-		NewCategoriesScreen(state),
-		NewReportScreen(state),
+		NewImportScreen(state, w),
+		NewTransactionsScreen(state, w),
+		NewCategoriesScreen(state, w),
+		NewReportScreen(state, w),
 	}
 
 	// --- Навігація ---
@@ -184,29 +196,5 @@ func showStartupWarnings(w fyne.Window, cfg *config.Config) {
 			msg += "\nПеревірте файли assets/report_311.yaml та assets/categories.yaml."
 			dialog.ShowError(fmt.Errorf("%s", msg), w)
 		}
-	})
-}
-
-// showProvidersWarning показує діалог з інструкцією щодо створення providers.yaml.
-// Викликається в горутині — чекає поки вікно стане видимим перед показом діалогу.
-func showProvidersWarning(w fyne.Window, path string) {
-	// Чекаємо поки вікно стане видимим
-	for w.Canvas().Size().IsZero() {
-		time.Sleep(50 * time.Millisecond)
-	}
-
-	fyne.Do(func() {
-		msg := fmt.Sprintf(
-			"Файл довідника постачальників не знайдено.\n\n"+
-				"Без нього категорія «Внески» не матиме розбивки\n"+
-				"по постачальниках у звіті «Журнал-ордер 311».\n\n"+
-				"Створіть файл %s з вмістом:\n\n"+
-				"  providers:\n"+
-				"    \"12345\": \"Іваненко І.І\"\n"+
-				"    \"67890\": \"Петренко П.П\"\n\n"+
-				"де ключ — особистий рахунок.",
-			path,
-		)
-		dialog.ShowInformation("Довідник постачальників", msg, w)
 	})
 }

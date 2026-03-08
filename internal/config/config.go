@@ -43,12 +43,8 @@ func Load() *Config {
 	}
 
 	cfg.Warnings = mappings.ValidateReport311Config(cfg.Report311, cfg.Categories)
-
-	// Validation: categories in report 311 must exist in categories.yaml
-	if warnings := mappings.ValidateReport311Config(cfg.Report311, cfg.Categories); len(warnings) > 0 {
-		for _, w := range warnings {
-			log.Printf("[config] warn: %s", w)
-		}
+	for _, w := range cfg.Warnings {
+		log.Printf("[config] warn: %s", w)
 	}
 
 	return cfg

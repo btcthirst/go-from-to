@@ -38,7 +38,7 @@ var columnWidths = []float32{100, 110, 110, 160, 110, 260, 180, 90}
 // maxLen — після якої кількості рун показуємо "..." і вмикаємо tooltip.
 const maxLen = 32
 
-func NewTransactionsScreen(state *AppState) fyne.CanvasObject {
+func NewTransactionsScreen(state *AppState, win fyne.Window) fyne.CanvasObject {
 	// --- Фільтри ---
 	searchEntry := widget.NewEntry()
 	searchEntry.SetPlaceHolder("Пошук по опису або контрагенту...")
@@ -132,7 +132,7 @@ func NewTransactionsScreen(state *AppState) fyne.CanvasObject {
 			return
 		}
 		tx := cachedTxs[id.Row-1]
-		showCategoryEditor(tx, state, func() {
+		showCategoryEditor(tx, state, win, func() {
 			refreshCache()
 			table.Refresh()
 		})
@@ -214,8 +214,7 @@ func containsIgnoreCase(str, substr string) bool {
 // --- Діалог редагування транзакції ---
 
 // showCategoryEditor відкриває діалог редагування категорії та постачальника.
-func showCategoryEditor(tx *models.Transaction, state *AppState, onSave func()) {
-	win := fyne.CurrentApp().Driver().AllWindows()[0]
+func showCategoryEditor(tx *models.Transaction, state *AppState, win fyne.Window, onSave func()) {
 
 	// --- Категорія ---
 	selectedCategory := tx.Category

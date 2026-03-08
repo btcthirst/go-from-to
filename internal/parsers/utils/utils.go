@@ -59,3 +59,24 @@ func SafeGet(row []string, idx int) string {
 	}
 	return strings.TrimSpace(row[idx])
 }
+
+// BuildHeaderIndex будує індекс «назва колонки → позиція» з рядка заголовків.
+// Пробіли навколо назв автоматично обрізаються.
+// Використовується CSV та XLSX парсерами.
+func BuildHeaderIndex(header []string) map[string]int {
+	idx := make(map[string]int, len(header))
+	for i, h := range header {
+		idx[strings.TrimSpace(h)] = i
+	}
+	return idx
+}
+
+// IsEmptyRow повертає true якщо всі клітинки рядка порожні або складаються лише з пробілів.
+func IsEmptyRow(row []string) bool {
+	for _, cell := range row {
+		if strings.TrimSpace(cell) != "" {
+			return false
+		}
+	}
+	return true
+}

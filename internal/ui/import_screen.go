@@ -35,11 +35,9 @@ func (f *loadedFile) statusText() string {
 }
 
 // NewImportScreen повертає екран імпорту файлів.
-func NewImportScreen(state *AppState) fyne.CanvasObject {
+func NewImportScreen(state *AppState, win fyne.Window) fyne.CanvasObject {
 	var mu sync.RWMutex
 	var files []loadedFile
-
-	win := fyne.CurrentApp().Driver().AllWindows()[0]
 
 	// --- Зведення (summary) ---
 	summaryLabel := widget.NewLabel("Файлів не завантажено")
@@ -89,7 +87,7 @@ func NewImportScreen(state *AppState) fyne.CanvasObject {
 
 	// refreshSummary оновлює підпис зведення під списком.
 	refreshSummary := func() {
-		total := len(state.Transactions)
+		total := len(state.GetTransactions())
 		fileCount := len(files)
 		switch fileCount {
 		case 0:

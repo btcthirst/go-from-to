@@ -90,7 +90,7 @@ func (p *PrivatBankParser) Parse(filepath string) ([]*models.Transaction, error)
 	header := records[0]
 	log.Printf("[PrivatBankCSV] Parse: headers = %v", header)
 
-	idx := buildIndex(header)
+	idx := utils.BuildHeaderIndex(header)
 
 	dateCol := utils.FirstMatch(idx, p.mapping.Get("date"))
 	amountCol := utils.FirstMatch(idx, p.mapping.Get("amount"))
@@ -115,7 +115,7 @@ func (p *PrivatBankParser) Parse(filepath string) ([]*models.Transaction, error)
 	skipped := 0
 
 	for rowNum, row := range records[1:] {
-		if len(row) == 0 || isEmptyRow(row) {
+		if len(row) == 0 || utils.IsEmptyRow(row) {
 			continue
 		}
 		tx, err := parseCSVRow(row, rowNum+2, dateCol, amountCol, currencyCol, descCol, counterpartyCol, ibanCol, edropuCol, docNumCol)
@@ -183,29 +183,12 @@ func parseCSVRow(row []string, rowNum, dateCol, amountCol, currencyCol, descCol,
 	}, nil
 }
 
-// --- Shared CSV helpers ---
-
+// normalizeHeaders будує set заголовків у lowercase для перевірки формату файлу в CanParse.
+// CSV-специфічна функція: не потрібна XLSX-парсеру.
 func normalizeHeaders(header []string) map[string]bool {
 	m := make(map[string]bool, len(header))
 	for _, h := range header {
 		m[strings.ToLower(strings.TrimSpace(h))] = true
 	}
 	return m
-}
-
-func buildIndex(header []string) map[string]int {
-	idx := make(map[string]int, len(header))
-	for i, h := range header {
-		idx[strings.TrimSpace(h)] = i
-	}
-	return idx
-}
-
-func isEmptyRow(row []string) bool {
-	for _, cell := range row {
-		if strings.TrimSpace(cell) != "" {
-			return false
-		}
-	}
-	return true
 }

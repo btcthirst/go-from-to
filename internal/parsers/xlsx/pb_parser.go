@@ -83,7 +83,7 @@ func (p *PrivatBankXLSXParser) Parse(filepath string) ([]*models.Transaction, er
 	}
 
 	header := rows[headerIdx]
-	idx := buildXLSXIndex(header)
+	idx := utils.BuildHeaderIndex(header)
 
 	dateCol := utils.FirstMatch(idx, p.mapping.Get("date"))
 	amountCol := utils.FirstMatch(idx, p.mapping.Get("amount"))
@@ -103,7 +103,7 @@ func (p *PrivatBankXLSXParser) Parse(filepath string) ([]*models.Transaction, er
 	skipped := 0
 
 	for rowNum, row := range rows[headerIdx+1:] {
-		if len(row) == 0 || isXLSXEmptyRow(row) {
+		if len(row) == 0 || utils.IsEmptyRow(row) {
 			continue
 		}
 		if isSummaryRow(row) {
@@ -170,22 +170,6 @@ func matchesAnyHeaderSet(row []string) bool {
 	return false
 }
 
-func buildXLSXIndex(header []string) map[string]int {
-	idx := make(map[string]int, len(header))
-	for i, h := range header {
-		idx[strings.TrimSpace(h)] = i
-	}
-	return idx
-}
-
-func isXLSXEmptyRow(row []string) bool {
-	for _, cell := range row {
-		if strings.TrimSpace(cell) != "" {
-			return false
-		}
-	}
-	return true
-}
 
 func isSummaryRow(row []string) bool {
 	if len(row) == 0 {

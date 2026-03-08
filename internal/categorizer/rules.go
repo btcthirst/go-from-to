@@ -3,6 +3,7 @@ package categorizer
 import (
 	"log"
 	"strings"
+	"sync"
 	"unicode"
 
 	"bank-analyzer/internal/mappings"
@@ -122,13 +123,21 @@ func (c *RulesCategorizer) AddRule(category, keyword, txType string) {
 	c.categories[category] = rule
 }
 
+var normalizerPool = sync.Pool{
+	New: func() interface{} {
+		return transform.Chain(
+			norm.NFKD,
+			runes.Remove(runes.In(unicode.Mn)),
+		)
+	},
+}
+
 // normalize приводить рядок до єдиного вигляду:
 // NFKD декомпозиція + видалення діакритики + lowercase.
 func normalize(s string) string {
-	t := transform.Chain(
-		norm.NFKD,
-		runes.Remove(runes.In(unicode.Mn)),
-	)
+	t := normalizerPool.Get().(transform.Transformer)
+	defer normalizerPool.Put(t)
+	t.Reset()
 	result, _, _ := transform.String(t, strings.ToLower(s))
 	return result
 }

@@ -32,8 +32,7 @@ type reportOptions struct {
 }
 
 // NewReportScreen повертає екран генерації звітів.
-func NewReportScreen(state *AppState) fyne.CanvasObject {
-	win := fyne.CurrentApp().Driver().AllWindows()[0]
+func NewReportScreen(state *AppState, win fyne.Window) fyne.CanvasObject {
 
 	// ─── Загальний звіт ──────────────────────────────────────────────────────
 
