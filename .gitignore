@@ -28,6 +28,13 @@ go.work.sum
 web/echo/echo
 web/net-http/net-http
 web/chi/chi
+fundamentals/01-basics/01-basics
+fundamentals/02-control-flow/02-control-flow
+fundamentals/03-functions/03-functions
+fundamentals/04-types/04-types
+fundamentals/05-concurrency/05-concurrency
+fundamentals/06-errors/06-errors
+fundamentals/07-stdlib/07-stdlib
 
 # env file
 .env
