@@ -24,6 +24,11 @@ profile.cov
 go.work
 go.work.sum
 
+# Compiled binaries (без розширення на Linux/macOS)
+web/echo/echo
+web/net-http/net-http
+web/chi/chi
+
 # env file
 .env
 
