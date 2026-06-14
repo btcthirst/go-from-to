@@ -98,8 +98,8 @@ func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, ErrorResponse{Error: msg})
 }
 
-func decodeJSON(r *http.Request, v any) error {
-	r.Body = http.MaxBytesReader(nil, r.Body, 1<<20) // 1MB limit
+func decodeJSON(w http.ResponseWriter, r *http.Request, v any) error {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1MB limit
 	return json.NewDecoder(r.Body).Decode(v)
 }
 
@@ -196,7 +196,7 @@ func (h *Handler) getUser(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) createUser(w http.ResponseWriter, r *http.Request) {
 	var u User
-	if err := decodeJSON(r, &u); err != nil {
+	if err := decodeJSON(w, r, &u); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
@@ -215,7 +215,7 @@ func (h *Handler) updateUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var u User
-	if err := decodeJSON(r, &u); err != nil {
+	if err := decodeJSON(w, r, &u); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}

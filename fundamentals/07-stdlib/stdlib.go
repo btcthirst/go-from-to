@@ -172,7 +172,9 @@ func jsonDemo() {
 
 	// map[string]any для динамічного JSON
 	var m map[string]any
-	json.Unmarshal([]byte(raw), &m)
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		fmt.Println("  Unmarshal (map) error:", err)
+	}
 	fmt.Printf("  price as any: %v (%T)\n", m["price"], m["price"])
 }
 
@@ -199,7 +201,9 @@ func httpServerDemo() {
 
 	// Запускаємо в goroutine і одразу робимо запит
 	go func() {
-		http.ListenAndServe(":18080", mux)
+		if err := http.ListenAndServe(":18080", mux); err != nil {
+			fmt.Println("  ListenAndServe error:", err)
+		}
 	}()
 	time.Sleep(10 * time.Millisecond) // чекаємо поки сервер запуститься
 
@@ -213,7 +217,11 @@ func httpServerDemo() {
 	body, _ := io.ReadAll(resp.Body)
 	fmt.Printf("  GET /hello: %s", body)
 
-	resp2, _ := http.Get("http://localhost:18080/json")
+	resp2, err := http.Get("http://localhost:18080/json")
+	if err != nil {
+		fmt.Println("  GET /json error:", err)
+		return
+	}
 	defer resp2.Body.Close()
 	body2, _ := io.ReadAll(resp2.Body)
 	fmt.Printf("  GET /json: %s", body2)

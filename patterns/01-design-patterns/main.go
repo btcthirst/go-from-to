@@ -116,6 +116,8 @@ type Response struct {
 	Body   string
 }
 
+type ctxKey string
+
 type Handler func(ctx context.Context, req Request) (Response, error)
 type Middleware func(Handler) Handler
 
@@ -154,7 +156,7 @@ func Auth(token string) Middleware {
 			if token == "" {
 				return Response{Status: 401, Body: "unauthorized"}, nil
 			}
-			ctx = context.WithValue(ctx, "user", "authenticated")
+			ctx = context.WithValue(ctx, ctxKey("user"), "authenticated")
 			return next(ctx, req)
 		}
 	}

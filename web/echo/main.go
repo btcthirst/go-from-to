@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"sync/atomic"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -161,10 +162,10 @@ func (h *Handler) getUserPosts(c echo.Context) error {
 // --- Custom middleware ---
 
 func requestID(next echo.HandlerFunc) echo.HandlerFunc {
-	counter := 0
+	var counter atomic.Int64
 	return func(c echo.Context) error {
-		counter++
-		c.Response().Header().Set("X-Request-ID", fmt.Sprintf("req-%d", counter))
+		id := counter.Add(1)
+		c.Response().Header().Set("X-Request-ID", fmt.Sprintf("req-%d", id))
 		return next(c)
 	}
 }

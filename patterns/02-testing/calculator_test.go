@@ -2,6 +2,7 @@ package calculator_test
 
 import (
 	"errors"
+	"fmt"
 	"math"
 	"net/http"
 	"net/http/httptest"
@@ -268,7 +269,7 @@ func BenchmarkCompute(b *testing.B) {
 		for i := range nums {
 			nums[i] = float64(i)
 		}
-		b.Run("", func(b *testing.B) {
+		b.Run(fmt.Sprintf("size=%d", size), func(b *testing.B) {
 			b.ResetTimer()
 			for b.Loop() {
 				calc.Compute(nums) //nolint:errcheck

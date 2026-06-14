@@ -30,14 +30,20 @@ func generateKeypair() {
 
 	// Зберегти у файл (формат Solana CLI: JSON масив байтів)
 	path := "/tmp/demo-keypair.json"
-	saveKeypair(wallet.PrivateKey, path)
+	if err := saveKeypair(wallet.PrivateKey, path); err != nil {
+		fmt.Println("  saveKeypair error:", err)
+		return
+	}
 	fmt.Println("  Збережено:", path)
 }
 
-func saveKeypair(pk solana.PrivateKey, path string) {
+func saveKeypair(pk solana.PrivateKey, path string) error {
 	bytes := []byte(pk)
-	data, _ := json.Marshal(bytes)
-	os.WriteFile(path, data, 0o600)
+	data, err := json.Marshal(bytes)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0o600)
 }
 
 // --- Імпорт з base58 ---
